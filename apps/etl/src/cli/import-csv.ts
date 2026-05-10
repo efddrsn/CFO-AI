@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { db, accounts, syncLogs, transactions } from "@cfo-ai/db";
 import { eq } from "drizzle-orm";
+import { categorize } from "../lib/categorization";
 import { parseCsv } from "../parsers/csv";
 
 const program = new Command();
@@ -62,16 +63,35 @@ program
       let skipped = 0;
 
       for (const row of rows) {
+        const currency = row.currency ?? account.currency;
+        const cat = await categorize({
+          originalDescription: row.description,
+          counterparty: row.counterparty,
+          amountCents: row.amountCents,
+          currency,
+          accountType: account.type,
+        });
+
         const result = await db
           .insert(transactions)
           .values({
             accountId: account.id,
             date: row.date,
             amountCents: row.amountCents,
-            currency: row.currency ?? account.currency,
+            currency,
             originalDescription: row.description,
             counterparty: row.counterparty,
+            categoryId: cat.categoryId,
+            subcategoryId: cat.subcategoryId,
             sourceTxnId: row.sourceTxnId,
+            rawJson: {
+              csv: { row },
+              categorization: {
+                source: cat.source,
+                confidence: cat.confidence,
+                rationale: cat.rationale,
+              },
+            },
             syncLogId: syncLog.id,
             status: opts.autoApprove ? "active" : "pending_sync",
           })

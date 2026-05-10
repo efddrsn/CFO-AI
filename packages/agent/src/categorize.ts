@@ -124,7 +124,7 @@ export class Categorizer {
         categoryId: fallbackCategoryId,
         subcategoryId: null,
         confidence: 0,
-        rationale: `Error: ${err instanceof Error ? err.message : String(err)}`,
+        rationale: `llm_error: ${err instanceof Error ? err.message : String(err)}`,
       };
     }
   }

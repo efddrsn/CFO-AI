@@ -118,7 +118,7 @@ export async function categorize(
       subcategoryId: null,
       source: "fallback",
       confidence: 0,
-      rationale: "ANTHROPIC_API_KEY missing — skipping LLM",
+      rationale: "no_anthropic_key: ANTHROPIC_API_KEY missing — skipping LLM",
     };
   }
   if (!_categorizer) {

@@ -79,6 +79,16 @@ export class PluggyClient {
   }
 
   /**
+   * Força uma autenticação imediata pra validar credenciais.
+   * Use no startup de workers/CLIs pra falhar cedo quando clientId/secret
+   * estão errados, em vez de só descobrir no primeiro item sincronizado.
+   */
+  async verifyAuth(): Promise<void> {
+    this.apiKey = null;
+    await this.getApiKey();
+  }
+
+  /**
    * Cria um connect_token pro widget Pluggy Connect (client-side).
    * Opcional: `clientUserId` pra rastreabilidade; `itemId` pra atualizar item existente.
    */

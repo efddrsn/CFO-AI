@@ -223,8 +223,11 @@ ORDER BY random() LIMIT 5;
 - [ ] Categorias inválidas/desconhecidas resultam em fallback "Não categorizado" — não em erro
 
 **Sem `ANTHROPIC_API_KEY`**:
-- [ ] Todas as txns ficam em "Não categorizado" com `cat_source='fallback'` e rationale = "ANTHROPIC_API_KEY missing — skipping LLM"
-- [ ] Ou seja: pipeline não quebra sem LLM.
+- [ ] Todas as txns ficam em "Não categorizado" com `cat_source='fallback'` e rationale prefixado por `no_anthropic_key:`
+- [ ] Com key inválida ou rede bloqueada: rationale prefixado por `llm_error:`
+- [ ] Ou seja: pipeline não quebra sem LLM, e os dois cenários são distinguíveis no rationale.
+
+**CSV import também categoriza** (não só Pluggy): `pnpm import-csv` chama o mesmo pipeline antes de inserir — txns CSV não devem ficar com `category_id=NULL`.
 
 ---
 
@@ -314,7 +317,7 @@ Validar que falhas comuns falham bem (não quebram tudo):
 |---|---|
 | `pluggy-sync` sem `PLUGGY_CLIENT_ID/SECRET` | sai com erro claro, não cria sync_log corrompido |
 | `pluggy-sync` sem items registrados | "Done: 0 item(s) synced" — exit 0 |
-| `pluggy-sync` com clientId inválido | logs do `Pluggy auth failed` no stderr; sync_log marcado como `failed` ou nem cria |
+| `pluggy-sync` com clientId inválido | **eager auth probe** falha no startup com "Pluggy auth failed: ..." e exit 1, *independente* de haver items ou não |
 | `/api/pluggy/items` com `itemId` malformado | 400 `invalid_body` |
 | Approve de sync já aprovado | 409 `invalid_state` |
 | Login com senha errada | 401 `invalid_credentials` |

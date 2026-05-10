@@ -21,6 +21,16 @@ program
     const windowDays = Number(opts.days);
     const client = new pluggy.PluggyClient({ clientId, clientSecret });
 
+    // Falha cedo se credenciais estão inválidas — antes mesmo de ver quantos
+    // items estão registrados. Caso contrário "Done: 0 item(s) synced" mascara
+    // o problema de auth.
+    try {
+      await client.verifyAuth();
+    } catch (err) {
+      console.error("Pluggy auth failed:", err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+
     if (opts.item) {
       console.log(`Syncing item ${opts.item} (${windowDays}d window)...`);
       const summary = await syncPluggyItem(opts.item, client, { windowDays });
