@@ -1,7 +1,17 @@
-# CFO-AI — Especificação v0.1
+# CFO-AI — Especificação v0.2
 
 > Documento vivo. Objetivo: alinhar visão, arquitetura e roadmap antes de escrever código.
-> Status: **rascunho para discussão**.
+> Status: **escolhas confirmadas — pronto pra começar Fase 0**.
+
+**Decisões fechadas (v0.2):**
+- Stack: TypeScript end-to-end (Next.js + Node)
+- Hosting: Railway (backend/cron) + Vercel (frontend)
+- UI: web-first (dashboard direto, sem Excel-first)
+- Notificações: Telegram (free, instant) → WhatsApp como upgrade futuro
+- Orçamento: até **R$ 150/mês** em serviços externos
+- Bancos do usuário: **Itaú PF, Nubank PF, Nubank PJ, Nomad, MITFCU**
+- Estratégia BR: **Pluggy Development environment (free, 100 items)** como fonte primária, complementada por email/PDF parsing
+- Estratégia US: **Teller.io free tier** (100 enrollments) → Plaid Limited Production como fallback
 
 ---
 
@@ -39,8 +49,8 @@ Um "CFO pessoal" autônomo: agente de IA + dashboard que centraliza todos os dad
 ## 3. Restrições e premissas
 
 - **Usuário único** (você). Auth simples; sem multi-tenant.
-- **Privacidade total**: dados não saem da sua infra (self-hosted ou cloud sob seu controle). Tokens/credenciais em vault.
-- **Custo**: idealmente < R$ 200/mês em serviços externos no MVP. (Pluggy enterprise a R$ 2.500/mês não cabe — ver §5.)
+- **Privacidade total**: dados não saem da sua infra (Railway + Supabase sob sua conta). Tokens/credenciais em vault.
+- **Orçamento**: ≤ **R$ 150/mês** em serviços externos. Cabe (ver §5.1).
 - **Latência aceitável**: dados podem ter até 24h de defasagem. Não é trading.
 - **LGPD**: como single-user, baixa exposição. Mesmo assim, criptografia at-rest e em trânsito.
 - **Editabilidade**: o usuário precisa conseguir mexer em categorização, regras, metas, premissas de projeção sem mexer em código.
@@ -53,15 +63,16 @@ Um "CFO pessoal" autônomo: agente de IA + dashboard que centraliza todos os dad
 
 | Fonte | Como acessar | Custo | Trabalho do usuário |
 |---|---|---|---|
-| **Open Finance BR via Pluggy** | API revendedora (Pluggy é ITP regulado). OFB regulado **+ "conexão direta"** (scraping autorizado) em ~80 instituições — cobre falhas comuns do OFB puro. | Trial 14d / 20 conexões grátis. Plano básico **R$ 2.500/mês** (caro pra PF). | Widget de consentimento (~1min, renova a cada 12 meses — UX crítica) |
-| **Open Finance BR via Belvo** | Similar à Pluggy, foco LATAM. Sandbox grátis (25 links). | "Launch" a partir de **US$ 1.000/mês com contrato de 12 meses**. Pior barreira que Pluggy. | Idem |
-| **Open Finance BR direto (DIY)** | Exige virar instituição regulada pelo BCB ou ter parceria com uma. **Inviável pra projeto pessoal.** | — | — |
-| **Nubank (pynubank, não-oficial)** | Lib Python que se autentica no app; expõe extrato e fatura. | Grátis (open source). | Login + 2FA inicial; pode quebrar se Nubank mudar API. |
-| **Faturas por email (Nubank, Itaú, Inter, etc.)** | Gmail API → baixa PDF → Claude/Textract extrai transações. | Custo de tokens LLM (~centavos por fatura). | Configurar Gmail OAuth uma vez. |
-| **CSV/OFX manual** | Download mensal pelo internet banking, drag-and-drop na ferramenta. | Grátis. | ~5 min/mês por banco. |
-| **Pix recebimentos/envios** | Coberto via OFB (extrato) ou parsing de email/SMS. | — | — |
+| **Pluggy Development environment** ⭐ | Conta Dashboard Pluggy (free dev) com **limite de 100 items** — suficiente pra single-user. OFB regulado + "conexão direta" (scraping autorizado da Pluggy) em ~80 instituições. | **R$ 0** (permanente, não é trial). | Widget de consentimento OFB (~1min, renova a cada 12 meses) |
+| **MeuPluggy (`meu.pluggy.ai`)** | Interface consumer da Pluggy — usuário conecta contas e gerencia consentimentos. Útil como UX de fallback se quisermos. | Grátis. | Mesma renovação OFB. |
+| **Pluggy Production** | Plano pago, sem limite de items. | **R$ 2.500+/mês**. Não cabe no orçamento. | — |
+| **Belvo** | Similar. Sandbox grátis (25 links). | "Launch" a partir de **US$ 1.000/mês + 12m contrato**. | — |
+| **Faturas por email (Nubank, Itaú, etc.)** | Gmail API → PDF → Claude (Haiku 4.5) extrai transações. | Tokens LLM (~centavos/fatura). | Configurar Gmail OAuth uma vez. |
+| **Notificações Itaú por email** | Itaú permite ativar email pra cada transação (Pix, cartão, débito). Gratuito. | Grátis. | Ativar uma vez no app Itaú. |
+| **pynubank (não-oficial)** | Lib Python; faz login com CPF+senha. | Grátis. | Setup 2FA; pode quebrar. |
+| **CSV/OFX manual** | Download pelo internet banking. | Grátis. | ~5min/mês/banco. |
 
-**Decisão recomendada:** começar com **Gmail/PDF parsing + CSV import** (zero custo, muito automático pra contas que mandam fatura por email). Adicionar Pluggy/Belvo trial (14d) pra validar OFB. Se ROI compensar e quiser pagar, sobe pro plano básico — senão, cai pra estratégia híbrida (OFB onde for grátis/barato + email parsing).
+**Decisão BR:** **Pluggy Dev env** como fonte primária (cobre Itaú, Nubank PF/PJ, BB, Inter, XP, etc.) + **email/PDF parsing** como complemento (preenche gaps conhecidos do Pluggy: parcelados, Pix no crédito, transferências sem beneficiário). Nomad fica fora do Pluggy (US-based) → statement mensal manual + email parsing.
 
 ### 🇺🇸 Estados Unidos
 
@@ -83,8 +94,29 @@ Um "CFO pessoal" autônomo: agente de IA + dashboard que centraliza todos os dad
 
 ### 📈 Investimentos BR (corretoras)
 - B3 / Investidor.gov: portal do CPF tem extrato consolidado, mas API pública limitada.
-- XP, BTG, Rico: via Open Finance (Pluggy/Belvo) — fase 2 do OFB cobre.
-- Tesouro Direto: scraping do portal ou OFB.
+- XP, BTG, Rico: via Open Finance (Pluggy Dev env cobre).
+- Tesouro Direto: via OFB (Pluggy) ou scraping do portal.
+
+---
+
+## 4.5. Plano específico por banco (do usuário)
+
+| Banco | Fonte primária | Complemento | Setup (1×) | Manutenção |
+|---|---|---|---|---|
+| **Itaú PF** | Pluggy Dev (OFB) | Notificações por email pra cada transação (Pix/cartão/débito) + OFX manual mensal pra reconciliar | Consentimento OFB no widget Pluggy + ativar notif email no app Itaú + Gmail OAuth | ~2min/mês (OFX backup) |
+| **Nubank PF** | Pluggy Dev (conexão direta) | Email Pix recebido + PDF fatura mensal (Gmail) | Consent Pluggy + Gmail OAuth | 0min |
+| **Nubank PJ** | Pluggy Dev | Agendar envio recorrente OFX/CSV no app Nubank PJ por email | Consent Pluggy + agendamento + Gmail OAuth | 0min |
+| **Nomad** | Statement mensal por email + parsing PDF | Confirmações de transferência por email (real-time) | Gmail OAuth + ativar statement | ~3min/mês |
+| **MITFCU** | Teller.io (free dev tier) | Plaid Limited Production como fallback se Teller não cobrir | OAuth via Teller Connect | 0min |
+
+**Setup inicial total:** ~1h. **Trabalho mensal recorrente:** ~5-10min (Itaú backup + Nomad statement). Tudo o resto roda sozinho.
+
+**Cobertura esperada de transações automáticas:**
+- Itaú: ~95% (Pluggy + email backup pra divergências)
+- Nubank PF: ~92% (Pluggy cobre maioria; email pega Pix; gaps em parcelado/Pix-crédito)
+- Nubank PJ: ~98% (extrato OFX agendado é canônico)
+- Nomad: ~80% (movimentação baixa, statement mensal já pega tudo)
+- MITFCU: ~98% (Teller é confiável)
 
 ---
 
@@ -137,28 +169,31 @@ Um "CFO pessoal" autônomo: agente de IA + dashboard que centraliza todos os dad
 | Frontend | **Next.js 16 + shadcn/ui + Tremor** | Tremor cobre todos os charts financeiros. TanStack Table pra grid de transações editável. Vercel AI SDK pra chat com streaming. |
 | Banco | **Postgres** (Supabase ou Neon) | Free tier generoso, RLS se virar multi-user. **DuckDB** opcional pra análises ad-hoc / projeções (lê Parquet, ótimo pra what-if rápido sem mexer no Postgres). |
 | Agente | **Claude Agent SDK** (Opus 4.7 + Haiku 4.5) | É um loop com tools, não um grafo multi-agent → Agent SDK > LangGraph aqui. Opus pra planejamento; Haiku pra categorização em massa. Prompt caching pra contexto fixo (regras, metas, schema). Anthropic [finance agent templates](https://github.com/anthropics/financial-services) como referência. |
-| Hosting | **Railway** ou **Fly.io** (backend/cron) + **Vercel** (frontend) | $5-20/mês. Alternativa cheap: VPS Hetzner ($5/mês) com Docker, controle total. |
-| Vault | **Supabase Vault** (libsodium) ou **Doppler** | Tokens OFB, Plaid items, exchange API keys. Rotação 90d. |
-| Notificações | **Telegram Bot** (free, instantâneo) ou **Resend** (email) | Pra alertas proativos. |
-| Observabilidade | **Sentry + Axiom/Logfire** | — |
+| Hosting | **Railway** (backend/cron) + **Vercel** (frontend) | ~$10-15 USD/mês. |
+| Vault | **Supabase Vault** (libsodium) | Tokens Pluggy item_id, Teller access_token, Gmail refresh_token, exchange API keys. |
+| Notificações | **Telegram Bot** (primário) + **Resend** (email fallback) | WhatsApp Business Cloud API fica como upgrade na Fase 5/6. |
+| Observabilidade | **Sentry + Axiom** | — |
 
-### Excel-first: opção MVP válida
+### 5.1 Orçamento mensal (cabe nos R$ 150)
 
-Existem dois caminhos defensáveis. **Você decide qual.**
+| Serviço | Custo estimado |
+|---|---|
+| Railway (backend + cron) | ~R$ 50-75 (US$ 10-15) |
+| Vercel free tier | R$ 0 |
+| Supabase free tier (até 500MB DB, suficiente pra anos) | R$ 0 |
+| Pluggy Development env | R$ 0 |
+| Teller.io dev tier | R$ 0 |
+| Schwab API | R$ 0 |
+| Resend free (3k emails/mês) | R$ 0 |
+| Telegram Bot | R$ 0 |
+| Anthropic API (Haiku categorização + Opus chat ocasional, com prompt caching) | ~R$ 30-60 |
+| **Total mensal estimado** | **~R$ 80-135** |
 
-**A) Web-first (minha recomendação default)**
-- Postgres é fonte de verdade desde o dia 1. UI web simples já no MVP.
-- Excel/Sheets é **export** sob demanda (relatório mensal, planilha what-if).
-- Vantagem: não precisa migrar dados depois. Pivot pra dashboard sofisticado é trivial.
-- Custo: ~5 dias a mais de trabalho no MVP que Excel-first.
+Folga real: ~R$ 15-70/mês pra absorver picos de uso do agente ou eventual upgrade.
 
-**B) Excel-first (validação rápida)**
-- Agente gera XLSX semanal com abas (Resumo, Cashflow, Cenários, Alertas) usando ExcelJS.
-- Postgres ainda existe (storage normalizado), mas não tem UI web — só o XLSX e um chat CLI/Telegram.
-- Vantagem: 80% do valor com 20% do esforço de UI. Boa pra validar quais views você realmente usa antes de codificar.
-- Risco: tentação de "ficar no Excel" e nunca migrar. Mitigar: marcar prazo (ex.: 4 semanas no Excel, depois obrigatório migrar).
+### 5.2 Decisão: web-first
 
-**Recomendo B se prioridade é velocidade de validação. A se prioridade é não retrabalhar.** Ver §9 pra escolher.
+Postgres é fonte de verdade desde o dia 1. Dashboard web já no MVP. **Excel/Google Sheets** entra apenas como **export sob demanda** (relatório mensal automático, planilha what-if pra brincar fora do app). Não há "Excel como source of truth" — evita retrabalho de migração.
 
 ---
 
@@ -218,61 +253,60 @@ integration_credentials(id, provider, account_link, encrypted_token,
 Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior só estruturalmente.
 
 ### Fase 0 — Fundação (3-5 dias)
-- [ ] Repo monorepo (`apps/web`, `services/api`, `services/etl`, `packages/shared`)
-- [ ] Postgres + migrations (Drizzle ou Alembic)
+- [ ] Monorepo (`apps/web`, `services/api`, `services/etl`, `packages/shared`)
+- [ ] Postgres (Supabase) + migrations Drizzle
 - [ ] Schema do §6 implementado
-- [ ] CLI: `import-csv <arquivo> --account <id>` (qualquer extrato OFX/CSV)
-- [ ] Auth single-user básica
-- [ ] Deploy Railway + Vercel funcionando
-- **Deliverable:** consigo subir CSVs manuais e ver lista de transações na web.
+- [ ] CLI: `import-csv <arquivo> --account <id>` (OFX/CSV)
+- [ ] Auth single-user (password + JWT)
+- [ ] Deploy Railway + Vercel funcionando, healthcheck e logs
+- **Deliverable:** subir CSVs manuais e ver transações em uma tabela web simples.
 
-### Fase 1 — Ingestão "barata" (3-5 dias)
-- [ ] Conector Gmail (OAuth) + filtro por remetente
-- [ ] Pipeline: PDF → Claude (Haiku 4.5) → transações estruturadas → DB
-- [ ] Conector pynubank (Nubank conta + cartão)
-- [ ] Reconciliação básica (dedup por hash de descrição+valor+data)
-- **Deliverable:** transações de Nubank + qualquer banco que mande fatura por email entram sozinhas.
+### Fase 1 — Ingestão BR via Pluggy + email (5-7 dias) ⭐
+- [ ] Cadastro Dashboard Pluggy (dev env), criar `clientId`/`clientSecret`
+- [ ] Pluggy Connect widget no app web — conectar Itaú PF, Nubank PF, Nubank PJ
+- [ ] Worker de sync diário (Pluggy `/items/{id}/transactions`, `/accounts`)
+- [ ] Conector Gmail (OAuth) + filtros por remetente: `todomundo@nubank.com.br`, notificações Itaú, Nomad
+- [ ] Pipeline: PDF/email → Claude (Haiku 4.5) → transações estruturadas → DB
+- [ ] Reconciliação: dedup por (account_id, source_txn_id) preferencial; fallback hash(descrição, valor, data)
+- [ ] Re-consent OFB: alerta 30 dias antes do vencimento (12 meses)
+- **Deliverable:** transações de Itaú + Nubank PF/PJ + Nomad entram automaticamente.
 
-### Fase 2 — Dashboard MVP (3-5 dias)
-- [ ] Telas: Net Worth, Cashflow mensal, Top categorias, Por conta
-- [ ] Filtros (período, conta, categoria)
-- [ ] Tela de regras de categorização (CRUD)
-- [ ] Categorização automática via LLM com cache (Haiku 4.5)
-- [ ] Export XLSX/Sheets do mês corrente
-- **Deliverable:** observabilidade visual decente.
+### Fase 2 — Dashboard MVP (4-6 dias)
+- [ ] Telas Tremor: Net Worth, Cashflow mensal, Top categorias, Por conta, Lista de transações
+- [ ] Filtros (período, conta, categoria, tags)
+- [ ] CRUD de regras de categorização (regex/contains/counterparty)
+- [ ] Categorização automática: regras → LLM (Haiku) com cache, treinado nas correções do usuário
+- [ ] Export XLSX/Google Sheets do mês corrente (relatório)
+- **Deliverable:** dashboard decente — abrir e entender finanças em 10s.
 
-### Fase 3 — Agente conversacional (5-7 dias)
-- [ ] API de chat com streaming (SSE)
-- [ ] Tools: `query_sql`, `get_balances`, `get_transactions`, `categorize`
-- [ ] Prompt caching pra schema + regras + metas (contexto fixo)
-- [ ] Tela de chat com markdown + gráficos inline
-- **Deliverable:** "quanto gastei com X mês passado?" funciona; "projeta meu saldo se eu economizar R$ 2k/mês".
+### Fase 3 — US (Teller + Schwab + cripto) (3-5 dias)
+- [ ] Teller Connect OAuth → MITFCU + qualquer outro US se aparecer
+- [ ] (Opcional) Schwab Developer API se houver brokerage relevante
+- [ ] FX: cache de taxas BCB/AwesomeAPI em `fx_rates(date, pair)`; converter na query
+- [ ] Cripto via CCXT (Binance/Coinbase read-only) se aplicável
+- **Deliverable:** net worth consolidado BR+US+(cripto) em BRL e USD.
 
-### Fase 4 — US (Teller + Schwab) (3-5 dias)
-- [ ] Teller.io OAuth + sync de contas/transações
-- [ ] Schwab API direto (brokerage holdings + P&L)
-- [ ] Conversão FX automática (USD/BRL com taxa do dia, cacheada)
-- [ ] Cripto: Binance + Coinbase read-only
-- **Deliverable:** net worth consolidado BR+US+cripto em BRL e USD.
+### Fase 4 — Agente conversacional (5-7 dias)
+- [ ] API de chat com streaming (Vercel AI SDK / SSE)
+- [ ] Tools do agente: `query_sql` (read-only sandbox), `get_balances`, `get_transactions`, `recategorize`, `project_cashflow`
+- [ ] Prompt caching pra contexto fixo (schema, regras, metas, premissas)
+- [ ] Tela de chat com markdown + gráficos inline (Tremor)
+- **Deliverable:** "quanto gastei com X mês passado?", "projeta saldo se eu economizar R$ 2k/mês".
 
-### Fase 5 — Open Finance BR (3-5 dias)
-- [ ] Trial Pluggy ou Belvo, validar com 3-5 instituições
-- [ ] Decisão: pagar Pluggy/Belvo OU consolidar com OFB-via-email + pynubank
-- [ ] Refresh diário automatizado
-- **Deliverable:** dados BR atualizando sozinhos.
+### Fase 5 — Proatividade (5-7 dias)
+- [ ] Telegram Bot setup + token no vault
+- [ ] Cron diário de análise (agente roda sem prompt, escreve em `alerts`)
+- [ ] Tools de alerta: outliers, projeção de orçamento, oportunidade de alocação, fechamento de cartão sem saldo, OFB consent expirando
+- [ ] Relatório semanal automático no Telegram + PDF mensal por email (Resend)
+- **Deliverable:** acordo segunda-feira com 1 mensagem "sua semana financeira".
 
-### Fase 6 — Proatividade (5-7 dias)
-- [ ] Cron de análise diária (agente roda sem prompt, gera alerts)
-- [ ] Tools de alerta: detecção de outliers, projeção de orçamento, oportunidade de alocação
-- [ ] Notificações: email + Telegram/Slack
-- [ ] Relatório mensal automático (email com narrativa + PDF)
-- **Deliverable:** acordo na 2ª-feira com 1 email "aqui está sua semana financeira".
-
-### Fase 7 — Planejamento avançado (contínuo)
-- [ ] Engine de projeção determinística (Monte Carlo opcional)
-- [ ] Editor de cenários ("what-if")
+### Fase 6 — Planejamento avançado (contínuo)
+- [ ] Engine de projeção determinística (cashflow + investment growth com CDI/SELIC/USD)
+- [ ] Monte Carlo opcional pra cenários com volatilidade
+- [ ] Editor de cenários no dashboard ("what-if")
 - [ ] Tracking de metas com alertas de desvio
 - [ ] Sugestões de realocação (regras + LLM)
+- [ ] **Upgrade futuro**: WhatsApp Business Cloud API substituindo Telegram
 
 ---
 
@@ -294,35 +328,34 @@ Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior s
 
 ## 8. Riscos & decisões em aberto
 
-1. **Pluggy/Belvo são caros pra single-user.** R$ 2.500/mês (Pluggy) ou US$ 1.000/mês + 12m (Belvo) matam o ROI. Caminhos:
-   - Tentar negociar plano "indie/founder" com Pluggy
-   - Trial 14d pra validar valor, depois cair em estratégia híbrida (email parsing + pynubank + CSV)
-   - Aguardar OFB BR abrir tier consumer (sem ETA)
-2. **pynubank é não-oficial — pode quebrar a qualquer momento.** Fallback obrigatório: CSV manual + parsing de email.
-3. **Renovação de consent OFB a cada 12 meses** é o pior fricção do produto. UX precisa antecipar (notificar 30 dias antes, deep-link pro re-consent).
-4. **Categorização LLM pode alucinar.** Mitigação: ordem **regras determinísticas → ML por embeddings → LLM (último caso)**; LLM treina nas correções do usuário (feedback loop).
-5. **FX histórico**: armazenar sempre em currency original + converter na query com taxa do dia da transação (cache de taxas BCB/AwesomeAPI em tabela `fx_rates(date, pair, rate)`).
-6. **Fidelity sem API**: se você tiver conta lá, planejar import manual + scraping autorizado de PDFs.
-7. **Multi-tenant futuro?** Se sim, RLS no Supabase + billing desde já. Se não, simplifica muito.
-8. **Retenção legal (BACEN)**: dados financeiros têm retenção mínima de 10 anos. Single-user importa pouco; multi-tenant precisa pensar.
+1. **Limite de 100 items do Pluggy Dev env.** Folga gigantesca pra single-user (5-10 contas), mas se o produto crescer pra multi-user, precisa virar Production (R$ 2.5k/mês). Aceitável agora.
+2. **Limitações conhecidas do Pluggy** (reportadas pela comunidade): parcelados às vezes inconsistentes, Pix no crédito pode não vir, transferências sem nome de beneficiário em alguns casos. **Mitigação:** email/PDF parsing como complemento + reconciliação por `source_txn_id` + flag de divergência no dashboard.
+3. **Renovação de consent OFB a cada 12 meses** é a pior fricção do produto. UX precisa antecipar (alerta 30d antes, deep-link pro widget de re-consent).
+4. **Categorização LLM pode alucinar.** Mitigação: ordem **regras determinísticas → embeddings (similaridade com txns já categorizadas) → LLM (último caso)**; LLM treina nas correções do usuário.
+5. **FX histórico**: armazenar sempre em currency original; converter na query com taxa do dia da transação (cache em `fx_rates(date, pair, rate)`).
+6. **MITFCU pode não estar no Teller**. Fallback: Plaid Limited Production (200 calls grátis/produto) → se passar disso, pay-as-you-go (~$1.50/user/mês). Cabe no orçamento.
+7. **pynubank fica como opcional** — se o Pluggy Dev cobrir bem o Nubank na prática, dispensável. Decidir depois da Fase 1.
+8. **Multi-tenant futuro?** Decisão adiada. Se sim, vai precisar Pluggy Production + RLS + billing — mudança grande.
+9. **Retenção legal (BACEN)**: dados financeiros têm retenção mínima de 10 anos para instituições reguladas. Single-user importa pouco.
 
 ---
 
-## 9. Próximos passos pra debater
+## 9. Decisões em aberto (a definir antes/durante Fase 0)
 
-1. **Stack**: Python + Next.js, ou tudo TypeScript? (impacta velocidade)
-2. **Hosting**: Railway/Vercel (fácil) vs self-host num VPS (mais privacidade)?
-3. **Excel-first ou web-first?** Recomendo web-first com export Sheets — mas é defensável o contrário.
-4. **Quais bancos/contas você tem hoje?** (Nubank, Itaú, Schwab, etc.) — define ordem das integrações.
-5. **Prioridade entre fases**: a sequência acima é minha proposta. Quer mexer? Por exemplo, pular pra agente conversacional antes do dashboard?
-6. **Orçamento mensal aceitável** pra serviços (Plaid, Pluggy, hosting, LLM tokens)?
-7. **Notificação proativa**: email, Telegram, Slack, push? (todas, alguma específica?)
+1. **Estrutura de monorepo**: pnpm workspaces ou Turborepo?
+2. **ORM**: Drizzle (mais leve, type-safe SQL) ou Prisma (mais maduro)? Default: Drizzle.
+3. **Categorias iniciais**: levantar lista inicial baseada nos seus extratos passados (Claude pode propor + você refinar).
+4. **Dimensão das metas no MVP**: quais 2-3 metas você quer trackar de saída? (ex.: reserva de emergência, compra X, freedom number).
+5. **Refresh do Pluggy**: diário (default) ou mais frequente em horário comercial? Custo é só de chamadas API, mas pode haver rate limit.
 
 ---
 
 ## Referências
 
 - [Pluggy pricing](https://www.pluggy.ai/pricing)
+- [Pluggy docs (dev env, 100 items limit)](https://docs.pluggy.ai/page/faq)
+- [MeuPluggy (consumer)](https://meu.pluggy.ai/)
+- [pluggyai/meu-pluggy GitHub](https://github.com/pluggyai/meu-pluggy)
 - [Belvo pricing](https://belvo.com/plans-and-pricing/)
 - [Plaid pricing](https://plaid.com/pricing/)
 - [Teller.io](https://teller.io/)
