@@ -18,6 +18,8 @@
     "db:studio": "pnpm --filter @cfo-ai/db studio",
     "import-csv": "pnpm --filter @cfo-ai/etl import-csv",
     "pluggy-sync": "pnpm --filter @cfo-ai/etl pluggy-sync",
+    "gmail-sync": "pnpm --filter @cfo-ai/etl gmail-sync",
+    "check-consents": "pnpm --filter @cfo-ai/etl check-consents",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "devDependencies": {

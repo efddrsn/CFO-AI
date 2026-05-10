@@ -8,6 +8,8 @@
     "build": "echo 'apps/etl roda via tsx — sem build step'",
     "import-csv": "tsx src/cli/import-csv.ts",
     "pluggy-sync": "tsx src/cli/pluggy-sync.ts",
+    "gmail-sync": "tsx src/cli/gmail-sync.ts",
+    "check-consents": "tsx src/cli/check-consents.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

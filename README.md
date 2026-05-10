@@ -13,8 +13,8 @@ apps/
   etl/          Workers e CLI — `import-csv`, `pluggy-sync`
 packages/
   db/           Schema Drizzle + migrations + seed de categorias
-  integrations/ Clientes de provedores (Pluggy hoje; Teller/Gmail/CCXT na frente)
-  agent/        Categorização via Sonnet 4.6 com prompt cache + few-shot
+  integrations/ Clientes de provedores (Pluggy, Gmail; Teller/CCXT na frente)
+  agent/        Categorização e email parsing via Sonnet 4.6 (prompt cache + few-shot)
   shared/       Types e utils compartilhados (Currency, money helpers)
 ```
 
@@ -48,6 +48,37 @@ pnpm --filter @cfo-ai/db create-user voce@email.com 'sua-senha' 'Seu Nome'
 pnpm --filter @cfo-ai/web dev
 # → http://localhost:3000 (login: voce@email.com / sua-senha)
 ```
+
+## Conectar Gmail (Fase 1)
+
+1. Crie um OAuth client em https://console.cloud.google.com/apis/credentials
+   - Tipo: Web application
+   - Authorized redirect URI: `http://localhost:3000/api/gmail/callback` (dev) ou seu `APP_URL/api/gmail/callback`
+   - Habilite a Gmail API no projeto
+2. Adicione ao `.env`:
+   ```
+   GMAIL_OAUTH_CLIENT_ID=...
+   GMAIL_OAUTH_CLIENT_SECRET=...
+   APP_URL=http://localhost:3000
+   ```
+3. Em `/connect` clique "Conectar Gmail" → consentimento Google
+4. Sync (filtros padrão: Nubank Pix, Nubank fatura PDF, Itaú notif, Nomad statement):
+   ```
+   pnpm gmail-sync
+   # Ou filtros específicos:
+   pnpm gmail-sync -- --filters nubank_pix_received,nubank_invoice_pdf
+   ```
+5. Aprove em `/sync-logs/<id>`
+
+## Alertas de re-consent (OFB)
+
+Pluggy/OFB exigem renovar consent a cada 12 meses. Rode periodicamente:
+
+```sh
+pnpm check-consents   # cria alerts(kind=consent_expiring) com 30 dias de antecedência
+```
+
+Em produção, cron diário no Railway: `0 9 * * * cd /app && pnpm check-consents`.
 
 ## Conectar Pluggy (Fase 1)
 

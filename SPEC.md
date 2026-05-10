@@ -410,24 +410,29 @@ Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior s
 - [ ] Deploy Railway + Vercel (instruções no README; aguardando criação das contas)
 - **Deliverable:** subir CSVs → SyncLog pendente; aprovar/rejeitar via UI ou via Claude Desktop (MCP); transações ativas visíveis.
 
-### Fase 1 — Ingestão BR via Pluggy + email (em progresso) ⭐
-**Pluggy entregue** (PR #1):
-- [ ] Cadastro Dashboard Pluggy (dev env), criar `clientId`/`clientSecret` — *user action*
+### Fase 1 — Ingestão BR via Pluggy + email (✅ completa em PR #1)
+**Pluggy** (commits até `5715b53`):
 - [x] Pacote `@cfo-ai/integrations` com cliente Pluggy + mapping Pluggy→CFO-AI
 - [x] Página `/connect` com Pluggy Connect widget (carrega script CDN, abre fluxo OFB)
 - [x] APIs: `/api/pluggy/connect-token`, `/api/pluggy/items`, `/api/pluggy/webhook`
-- [x] Worker `pluggy-sync` (`pnpm pluggy-sync` — janela 30d default, paginado)
+- [x] Worker `pluggy-sync` com eager auth probe (janela 30d default, paginado)
 - [x] Mapeamento de `installment_*` quando Pluggy retorna parcelado (creditCardMetadata)
 - [x] Reconciliação por `(account_id, source_txn_id)` (unique index no schema)
 - [x] UI `/sync-logs/[id]` com lista de transações, categoria, parcela, status
 - [x] Pacote `@cfo-ai/agent` com categorização Sonnet 4.6 + few-shot LRU (§6.2)
-- [x] Pipeline ETL: regras determinísticas → LLM → fallback "Não categorizado"
+- [x] Pipeline ETL: regras determinísticas → LLM → fallback "Não categorizado" (usado em CSV e Pluggy)
 
-**Pendente nesta fase:**
-- [ ] Conector Gmail (OAuth) + filtros: `todomundo@nubank.com.br`, notificações Itaú, Nomad
-- [ ] Pipeline: PDF/email → Sonnet 4.6 → transações estruturadas → SyncLog pendente
-- [ ] Re-consent OFB: alerta 30 dias antes do vencimento (12 meses)
-- **Deliverable:** Pluggy ponta-a-ponta funciona; falta Gmail e alerta de re-consent.
+**Gmail + alerta de re-consent** (commits após `a6066d1`):
+- [x] Migration: `integration_credentials` ganha `refresh_token`, `scopes`, `sync_cursor`
+- [x] OAuth Gmail: `/api/gmail/auth` + `/api/gmail/callback` com state cookie CSRF
+- [x] Cliente Gmail (`@cfo-ai/integrations/gmail`): list/get messages, attachments, refresh automático
+- [x] Filtros conhecidos: Nubank Pix recebido, Nubank fatura PDF, Itaú notificações, Nomad statement
+- [x] Email parser LLM (`@cfo-ai/agent.EmailParser`): texto e PDF (vision) via Sonnet 4.6
+- [x] Worker `gmail-sync`: lista por filtro → parse LLM → categoriza → SyncLog pending_review
+- [x] Dedup por `source_txn_id="gmail:<messageId>:<idx>"`
+- [x] Alerta de re-consent: `pnpm check-consents` cria `alerts(kind='consent_expiring')` quando `expires_at` < 30 dias (idempotente por dia)
+
+**Deliverable Fase 1**: ingestão BR autônoma (Pluggy + Gmail + manual CSV), com categorização adaptativa e alertas proativos pra re-consent. Pronto pra Fase 2 (Dashboard).
 
 ### Fase 2 — Dashboard MVP + categorização (5-7 dias)
 - [ ] Telas Tremor: Net Worth, Cashflow mensal, Top categorias, Por conta, Lista de transações
