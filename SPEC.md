@@ -5,13 +5,18 @@
 
 **Decisões fechadas (v0.2):**
 - Stack: TypeScript end-to-end (Next.js + Node)
+- Monorepo: **Turborepo** (cache de build incremental escala melhor)
+- ORM: **Drizzle** (type-safe SQL, leve, fácil de migrar)
 - Hosting: Railway (backend/cron) + Vercel (frontend)
 - UI: web-first (dashboard direto, sem Excel-first)
 - Notificações: Telegram (free, instant) → WhatsApp como upgrade futuro
+- Refresh do Pluggy: **1×/dia**
 - Orçamento: até **R$ 150/mês** em serviços externos
 - Bancos do usuário: **Itaú PF, Nubank PF, Nubank PJ, Nomad, MITFCU**
 - Estratégia BR: **Pluggy Development environment (free, 100 items)** como fonte primária, complementada por email/PDF parsing
 - Estratégia US: **Teller.io free tier** (100 enrollments) → Plaid Limited Production como fallback
+- Metas: feature do produto (usuário cria/edita no dashboard, agente acompanha) — sem seed inicial
+- Categorias: taxonomia 2 níveis (ver §6.1) seedada na primeira execução; usuário edita via dashboard
 
 ---
 
@@ -246,6 +251,30 @@ integration_credentials(id, provider, account_link, encrypted_token,
                         expires_at, last_refresh_at)
 ```
 
+### 6.1 Taxonomia inicial de categorias (seed)
+
+Princípios: separa **investimentos** e **transferências internas** como `kind` próprio (não poluem "gasto"); cobre realidade cross-border BR+US (subcategoria "Aporte US", "Spread câmbio"); editável pelo usuário via dashboard.
+
+| Pai | kind | Filhos |
+|---|---|---|
+| **Renda** | income | Salário, Pró-labore/PJ, Investimentos (juros/dividendos), Aluguel recebido, Reembolsos, Outros |
+| **Moradia** | expense | Aluguel/financiamento, Condomínio, IPTU, Energia/Água/Gás, Internet, Manutenção/Reformas, Mobiliário |
+| **Alimentação** | expense | Mercado, Restaurante, Delivery, Cafeteria/bebidas |
+| **Transporte** | expense | Combustível, Estacionamento/pedágio, Uber/táxi, Transporte público, Manutenção do carro, IPVA/seguro |
+| **Saúde** | expense | Plano de saúde, Consultas, Farmácia, Academia, Terapia |
+| **Educação** | expense | Cursos, Livros, Assinaturas educacionais |
+| **Lazer** | expense | Streaming/assinaturas, Viagens, Bares/eventos, Hobbies, Jogos |
+| **Compras pessoais** | expense | Vestuário, Eletrônicos, Beleza, Presentes |
+| **Pets** | expense | Ração/vet/pet shop |
+| **Família/Filhos** | expense | (opcional, ativar se aplicável) |
+| **Impostos** | expense | IRPF, Outros |
+| **Tarifas financeiras** | expense | Tarifas bancárias, Juros pagos, Spread câmbio |
+| **Investimentos** | investment | Aporte renda fixa BR, Aporte renda variável BR, Aporte cripto, Aporte US (brokerage), Resgate |
+| **Transferências internas** | transfer | Entre contas próprias (BR↔US, etc.), Pagamento de cartão |
+| **Não categorizado** | expense | (fallback) |
+
+A migration inicial cria essas categorias; CRUD no dashboard permite renomear/criar/desativar.
+
 ---
 
 ## 7. Roadmap por fases
@@ -253,13 +282,13 @@ integration_credentials(id, provider, account_link, encrypted_token,
 Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior só estruturalmente.
 
 ### Fase 0 — Fundação (3-5 dias)
-- [ ] Monorepo (`apps/web`, `services/api`, `services/etl`, `packages/shared`)
+- [ ] **Turborepo** com workspaces: `apps/web` (Next.js), `apps/api` (Node/Hono ou Next API), `apps/etl` (workers/cron), `packages/db` (schema Drizzle), `packages/shared` (types/utils)
 - [ ] Postgres (Supabase) + migrations Drizzle
-- [ ] Schema do §6 implementado
+- [ ] Schema do §6 + seed da taxonomia §6.1
 - [ ] CLI: `import-csv <arquivo> --account <id>` (OFX/CSV)
 - [ ] Auth single-user (password + JWT)
 - [ ] Deploy Railway + Vercel funcionando, healthcheck e logs
-- **Deliverable:** subir CSVs manuais e ver transações em uma tabela web simples.
+- **Deliverable:** subir CSVs manuais e ver transações em uma tabela web simples; categorias seedadas; CRUD básico de contas.
 
 ### Fase 1 — Ingestão BR via Pluggy + email (5-7 dias) ⭐
 - [ ] Cadastro Dashboard Pluggy (dev env), criar `clientId`/`clientSecret`
@@ -340,13 +369,13 @@ Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior s
 
 ---
 
-## 9. Decisões em aberto (a definir antes/durante Fase 0)
+## 9. Decisões pendentes (a resolver durante implementação)
 
-1. **Estrutura de monorepo**: pnpm workspaces ou Turborepo?
-2. **ORM**: Drizzle (mais leve, type-safe SQL) ou Prisma (mais maduro)? Default: Drizzle.
-3. **Categorias iniciais**: levantar lista inicial baseada nos seus extratos passados (Claude pode propor + você refinar).
-4. **Dimensão das metas no MVP**: quais 2-3 metas você quer trackar de saída? (ex.: reserva de emergência, compra X, freedom number).
-5. **Refresh do Pluggy**: diário (default) ou mais frequente em horário comercial? Custo é só de chamadas API, mas pode haver rate limit.
+Nenhum bloqueador imediato. A próxima etapa é começar a Fase 0. Pequenas escolhas que podem aparecer:
+
+1. **Backend framework**: Next.js API routes (tudo em um) vs Hono separado em `apps/api` — Next API é suficiente pro MVP; separar só se virar gargalo.
+2. **Workers**: Trigger.dev / BullMQ no Redis / cron simples — começar com **cron simples no Railway** (1 job/dia pra Pluggy sync); upgrade pra Trigger.dev se tiver muitas tasks paralelas.
+3. **Auth UI**: usar Clerk (free tier generoso, 5min de setup) ou rolar próprio? Como é single-user, **password + JWT próprio** é suficiente e zero custo.
 
 ---
 
