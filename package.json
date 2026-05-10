@@ -1,0 +1,27 @@
+{
+  "name": "cfo-ai",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @cfo-ai/db generate",
+    "db:migrate": "pnpm --filter @cfo-ai/db migrate",
+    "db:seed": "pnpm --filter @cfo-ai/db seed",
+    "db:studio": "pnpm --filter @cfo-ai/db studio",
+    "import-csv": "pnpm --filter @cfo-ai/etl import-csv",
+    "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.0",
+    "typescript": "^5.6.3"
+  }
+}

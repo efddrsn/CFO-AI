@@ -1,0 +1,31 @@
+{
+  "name": "@cfo-ai/etl",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "import-csv": "./dist/cli/import-csv.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli/import-csv.ts",
+    "build": "tsc",
+    "import-csv": "tsx src/cli/import-csv.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@cfo-ai/db": "workspace:*",
+    "@cfo-ai/shared": "workspace:*",
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.36.4",
+    "papaparse": "^5.4.1",
+    "postgres": "^3.4.5",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/papaparse": "^5.3.15",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

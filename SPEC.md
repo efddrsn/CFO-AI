@@ -5,7 +5,7 @@
 
 **Decisões fechadas (v0.3):**
 - Stack: TypeScript end-to-end (Next.js + Node)
-- Monorepo: **Turborepo** com `apps/web`, `apps/api`, `apps/mcp`, `apps/etl`, `packages/db`, `packages/shared`
+- Monorepo: **Turborepo** com `apps/web` (Next.js + API routes), `apps/mcp`, `apps/etl`, `packages/db`, `packages/shared`. (apps/api consolidado dentro de apps/web — separar fica trivial se virar gargalo.)
 - ORM: **Drizzle** (type-safe SQL, leve, fácil de migrar)
 - Hosting: Railway (api/etl/mcp) + Vercel (web)
 - UI: web-first (dashboard direto)
@@ -397,14 +397,18 @@ Tudo entra em `category_proposals(status=pending)` → você aprova com 1 clique
 
 Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior só estruturalmente.
 
-### Fase 0 — Fundação (3-5 dias)
-- [ ] **Turborepo** com workspaces: `apps/web` (Next.js), `apps/api` (Next API routes), `apps/mcp` (MCP server), `apps/etl` (workers/cron), `packages/db` (schema Drizzle), `packages/shared` (types/utils)
-- [ ] Postgres (Supabase) + migrations Drizzle
-- [ ] Schema do §6 (incluindo `sync_logs`, installments, soft delete) + seed da taxonomia §6.1
-- [ ] CLI: `import-csv <arquivo> --account <id>` que cria `SyncLog(pending_review)` (OFX/CSV)
-- [ ] Auth single-user (password + JWT)
-- [ ] Deploy Railway (api/etl/mcp) + Vercel (web), healthcheck e logs
-- **Deliverable:** subir CSVs manuais → SyncLog pendente; aprovar/rejeitar via UI; ver transações ativas.
+### Fase 0 — Fundação (✅ implementada — commit em `claude/financial-planning-agent-kOigP`)
+- [x] **Turborepo** com workspaces: `apps/web` (Next.js + API routes), `apps/mcp` (MCP server), `apps/etl` (workers/cron + CLI), `packages/db` (schema Drizzle), `packages/shared` (types/utils)
+- [x] Postgres + migrations Drizzle (15 tabelas)
+- [x] Schema do §6 (incluindo `sync_logs`, `transactions` com installments + soft delete, `correction_examples`, `category_proposals`, `category_history`, `transaction_tags`, etc.)
+- [x] Seed da taxonomia §6.1 (`pnpm db:seed`)
+- [x] CLI: `import-csv <arquivo> --account <uuid> [--auto-approve]` cria `SyncLog(pending_review)` com transações em `pending_sync`
+- [x] Auth single-user (bcrypt + JWT via `jose`, cookie `httpOnly`); middleware protege rotas
+- [x] UI básica: `/login`, `/transactions`, `/sync-logs` (com botões aprovar/rejeitar)
+- [x] APIs: `/api/auth/login`, `/api/health`, `/api/sync-logs`, `/api/sync-logs/:id/approve|reject`, `/api/transactions`
+- [x] MCP server stdio (Fase 0 tools: `list_accounts`, `list_transactions`, `list_pending_syncs`, `approve_sync`, `reject_sync`, `expense_summary`)
+- [ ] Deploy Railway + Vercel (instruções no README; aguardando criação das contas)
+- **Deliverable:** subir CSVs → SyncLog pendente; aprovar/rejeitar via UI ou via Claude Desktop (MCP); transações ativas visíveis.
 
 ### Fase 1 — Ingestão BR via Pluggy + email (5-7 dias) ⭐
 - [ ] Cadastro Dashboard Pluggy (dev env), criar `clientId`/`clientSecret`
