@@ -16,7 +16,7 @@
 - Estratégia BR: **Pluggy Development environment (free, 100 items)** como fonte primária, complementada por email/PDF parsing
 - Estratégia US: **Teller.io free tier** (100 enrollments) → Plaid Limited Production como fallback
 - Metas: feature do produto (usuário cria/edita no dashboard, agente acompanha) — sem seed inicial
-- Categorias: taxonomia 2 níveis (ver §6.1) seedada na primeira execução; usuário edita via dashboard
+- Categorias: taxonomia 2 níveis (ver §6.1) seedada como ponto de partida; **evolui automaticamente** com uso (aprende com correções, clustering de não-categorizado, sugere splits/merges/novas categorias — ver §6.2)
 
 ---
 
@@ -249,6 +249,24 @@ alerts(id, severity, kind, title, body_md,
 -- Tokens de integração (criptografados)
 integration_credentials(id, provider, account_link, encrypted_token,
                         expires_at, last_refresh_at)
+
+-- Embeddings pra clustering e similaridade (pgvector)
+-- Adicionado em transactions:
+--   embedding vector(1536)  -- da descrição+contraparte normalizadas
+
+-- Tags livres (camada flexível acima das categorias)
+transaction_tags(transaction_id, tag, source)
+  -- source ∈ {user, agent, rule}
+
+-- Propostas do agente sobre evolução da taxonomia
+category_proposals(id, kind, payload_json, rationale_md,
+                   confidence, status, generated_at, decided_at, decided_by)
+  -- kind ∈ {new_category, split, merge, rename, archive, new_subcategory}
+  -- status ∈ {pending, accepted, rejected, dismissed, auto_applied}
+
+-- Histórico de mudanças em categorias (preserva integridade de relatórios passados)
+category_history(id, category_id, change_type, before_json, after_json,
+                 applied_at, proposal_id)
 ```
 
 ### 6.1 Taxonomia inicial de categorias (seed)
@@ -275,6 +293,36 @@ Princípios: separa **investimentos** e **transferências internas** como `kind`
 
 A migration inicial cria essas categorias; CRUD no dashboard permite renomear/criar/desativar.
 
+### 6.2 Evolução da taxonomia (adaptativa)
+
+Categoria estática vira muleta. A taxonomia evolui automaticamente por 4 mecanismos:
+
+**1. Aprende com correções do usuário**
+Toda recategorização gera/atualiza uma `rule` automática (ex: contraparte "STARLINK BR" → "Internet"). O agente aplica retroativamente em transações similares (com confirmação se afetar > 10 transações). Se um padrão de correções aponta pra "deveria existir uma categoria nova", abre `category_proposal` do tipo `new_subcategory`.
+
+**2. Clustering de "Não categorizado" e "Outros"**
+Cron semanal:
+- Pega transações em fallback dos últimos 90 dias
+- Computa embeddings (descrição + contraparte normalizadas) — `text-embedding-3-small` ou similar
+- Clustering por similaridade (HDBSCAN ou k-means simples)
+- Cluster com ≥ 5 transações → `category_proposal(kind=new_category)` com nome sugerido pelo Claude e justificativa
+- Você aprova/rejeita no dashboard com 1 clique → vira categoria + regra retroativa
+
+**3. Detecção de "categoria gorda demais"**
+Categoria com > 15% do gasto total ou > 50 transações/mês com alta variância → agente analisa subpadrões e sugere `split`.
+Exemplo: "Alimentação" com 2 picos detectáveis (Mercado mensal R$ 800, fixo + Delivery diário R$ 30, recorrente) → propõe split em subcategorias.
+
+**4. Detecção de "categoria magra demais"**
+< 3 transações em 6 meses → sugere `archive` ou `merge` com categoria pai.
+
+**Garantias:**
+- `category_history` preserva o estado anterior em qualquer mudança → relatórios históricos não quebram (queries fazem `as-of date` resolution).
+- Auto-aplicação só ocorre em mudanças de baixo risco (rename de subcategoria, criação a partir de cluster muito coeso). Splits, merges e renames de categoria-pai sempre exigem aprovação humana.
+- `confidence` na proposta determina se vira notificação push ou só fica na fila do dashboard.
+
+**Tools do agente relacionadas (Fases 4-5):**
+`cluster_uncategorized`, `propose_category_change`, `apply_proposal`, `learn_rule_from_correction`.
+
 ---
 
 ## 7. Roadmap por fases
@@ -300,13 +348,16 @@ Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior s
 - [ ] Re-consent OFB: alerta 30 dias antes do vencimento (12 meses)
 - **Deliverable:** transações de Itaú + Nubank PF/PJ + Nomad entram automaticamente.
 
-### Fase 2 — Dashboard MVP (4-6 dias)
+### Fase 2 — Dashboard MVP + categorização adaptativa básica (5-7 dias)
 - [ ] Telas Tremor: Net Worth, Cashflow mensal, Top categorias, Por conta, Lista de transações
 - [ ] Filtros (período, conta, categoria, tags)
 - [ ] CRUD de regras de categorização (regex/contains/counterparty)
-- [ ] Categorização automática: regras → LLM (Haiku) com cache, treinado nas correções do usuário
+- [ ] Pipeline de categorização: **regras determinísticas → embeddings (top-K similar) → LLM (Haiku) com cache**
+- [ ] **Aprendizado por correção**: recategorização do usuário cria/atualiza regra automática + aplica retroativamente (com confirmação se >10 txns)
+- [ ] Habilitar `pgvector` no Postgres + popular embeddings das transações
+- [ ] Tabelas `transaction_tags`, `category_history`
 - [ ] Export XLSX/Google Sheets do mês corrente (relatório)
-- **Deliverable:** dashboard decente — abrir e entender finanças em 10s.
+- **Deliverable:** dashboard decente; sistema já aprende quando você corrige.
 
 ### Fase 3 — US (Teller + Schwab + cripto) (3-5 dias)
 - [ ] Teller Connect OAuth → MITFCU + qualquer outro US se aparecer
@@ -322,12 +373,17 @@ Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior s
 - [ ] Tela de chat com markdown + gráficos inline (Tremor)
 - **Deliverable:** "quanto gastei com X mês passado?", "projeta saldo se eu economizar R$ 2k/mês".
 
-### Fase 5 — Proatividade (5-7 dias)
+### Fase 5 — Proatividade + taxonomia adaptativa avançada (6-8 dias)
 - [ ] Telegram Bot setup + token no vault
 - [ ] Cron diário de análise (agente roda sem prompt, escreve em `alerts`)
 - [ ] Tools de alerta: outliers, projeção de orçamento, oportunidade de alocação, fechamento de cartão sem saldo, OFB consent expirando
+- [ ] **Cron semanal de evolução da taxonomia** (§6.2):
+  - [ ] `cluster_uncategorized` — propõe novas categorias a partir de clusters
+  - [ ] Detecção de categoria "gorda" → propõe split
+  - [ ] Detecção de categoria "magra" → propõe archive/merge
+  - [ ] Tabela `category_proposals` + UI de aprovação (1-clique) no dashboard
 - [ ] Relatório semanal automático no Telegram + PDF mensal por email (Resend)
-- **Deliverable:** acordo segunda-feira com 1 mensagem "sua semana financeira".
+- **Deliverable:** acordo segunda-feira com mensagem "sua semana financeira" + propostas de melhoria de taxonomia esperando aprovação.
 
 ### Fase 6 — Planejamento avançado (contínuo)
 - [ ] Engine de projeção determinística (cashflow + investment growth com CDI/SELIC/USD)
