@@ -1,14 +1,16 @@
-# CFO-AI — Especificação v0.2
+# CFO-AI — Especificação v0.3
 
 > Documento vivo. Objetivo: alinhar visão, arquitetura e roadmap antes de escrever código.
 > Status: **escolhas confirmadas — pronto pra começar Fase 0**.
 
-**Decisões fechadas (v0.2):**
+**Decisões fechadas (v0.3):**
 - Stack: TypeScript end-to-end (Next.js + Node)
-- Monorepo: **Turborepo** (cache de build incremental escala melhor)
+- Monorepo: **Turborepo** com `apps/web`, `apps/api`, `apps/mcp`, `apps/etl`, `packages/db`, `packages/shared`
 - ORM: **Drizzle** (type-safe SQL, leve, fácil de migrar)
-- Hosting: Railway (backend/cron) + Vercel (frontend)
-- UI: web-first (dashboard direto, sem Excel-first)
+- Hosting: Railway (api/etl/mcp) + Vercel (web)
+- UI: web-first (dashboard direto)
+- **Agente: MCP-first.** Tools expostas via servidor MCP local; cliente pode ser Claude Desktop, Claude Code, Cursor ou agente proativo interno (cron) — todos consomem as mesmas tools.
+- LLM padrão: **Sonnet 4.6** pra categorização e análise; Opus 4.7 só pra projeções/planejamento complexo (Fase 6+)
 - Notificações: Telegram (free, instant) → WhatsApp como upgrade futuro
 - Refresh do Pluggy: **1×/dia**
 - Orçamento: até **R$ 150/mês** em serviços externos
@@ -16,7 +18,8 @@
 - Estratégia BR: **Pluggy Development environment (free, 100 items)** como fonte primária, complementada por email/PDF parsing
 - Estratégia US: **Teller.io free tier** (100 enrollments) → Plaid Limited Production como fallback
 - Metas: feature do produto (usuário cria/edita no dashboard, agente acompanha) — sem seed inicial
-- Categorias: taxonomia 2 níveis (ver §6.1) seedada como ponto de partida; **evolui automaticamente** com uso (aprende com correções, clustering de não-categorizado, sugere splits/merges/novas categorias — ver §6.2)
+- Categorias: taxonomia 2 níveis (ver §6.1) seedada como ponto de partida; **evolui via LLM com few-shot das correções recentes** (sem embeddings/clustering — ver §6.2)
+- Ingestão: **sync approval workflow** — toda importação cria `SyncLog(pending)` revisável antes de virar canônica (inspirado no Argus)
 
 ---
 
@@ -127,44 +130,69 @@ Um "CFO pessoal" autônomo: agente de IA + dashboard que centraliza todos os dad
 
 ## 5. Arquitetura proposta
 
+**MCP-first**: a inteligência vive em qualquer cliente MCP (Claude Desktop pra conversa interativa; agente proativo interno pra cron). Os dois consomem as mesmas tools expostas pelo servidor MCP, que é uma camada fina sobre a API.
+
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Frontend (Next.js + Tremor)                             │
-│  • Dashboard (net worth, cashflow, metas)               │
-│  • Chat com agente                                      │
-│  • Editor de regras/categorias/metas                    │
+│ CLIENTES (escolha do usuário)                           │
+│ • Claude Desktop  • Claude Code  • Cursor               │
+│ • Agente proativo interno (cron, Sonnet 4.6)            │
 └─────────────────────────────────────────────────────────┘
-                          │
+                          │ MCP (stdio/SSE)
                           ▼
 ┌─────────────────────────────────────────────────────────┐
-│ API (FastAPI ou Next.js API routes)                     │
-│  • Endpoints REST + SSE pra streaming do agente         │
-│  • Auth (single-user, password + JWT)                   │
+│ apps/mcp — MCP Server (TS)                              │
+│ Tools (camada fina sobre API):                          │
+│  • list_transactions, query_transactions                │
+│  • get_balances, get_net_worth, get_cashflow            │
+│  • list_accounts, list_categories                       │
+│  • list_pending_syncs, approve_sync, reject_sync        │
+│  • bulk_categorize, recategorize_one                    │
+│  • list_goals, update_goal_progress                     │
+│  • project_cashflow, what_if                            │
+│  • list_proposals, accept_proposal, reject_proposal     │
+│  • create_alert, list_alerts                            │
+└─────────────────────────────────────────────────────────┘
+                          │ HTTP/JSON + JWT
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│ apps/api — Next.js API routes (TS)                      │
+│  • REST endpoints (read+write)                          │
+│  • Auth single-user (password + JWT)                    │
+│  • Service layer (business logic)                       │
 └─────────────────────────────────────────────────────────┘
                           │
-        ┌─────────────────┼─────────────────┐
-        ▼                 ▼                 ▼
-┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-│ Agente CFO   │  │ ETL workers  │  │ Postgres     │
-│ (Anthropic   │  │ (cron)       │  │ (Supabase)   │
-│  SDK, Opus   │  │              │  │              │
-│  4.7 +       │  │ Conectores:  │  │ Tabelas:     │
-│  Haiku 4.5)  │  │ • Teller     │  │ • accounts   │
-│              │  │ • Pluggy     │  │ • txns       │
-│ Tools:       │  │ • Schwab     │  │ • balances   │
-│ • SQL query  │  │ • Gmail+PDF  │  │ • categories │
-│ • Projeções  │  │ • CSV import │  │ • goals      │
-│ • Alertas    │  │ • Crypto     │  │ • rules      │
-│ • Sheets     │  │              │  │ • projections│
-└──────────────┘  └──────────────┘  └──────────────┘
-                          │
-                          ▼
-                  ┌──────────────┐
-                  │ Vault        │
-                  │ (tokens OFB, │
-                  │  Plaid, etc) │
-                  └──────────────┘
+       ┌──────────────────┼──────────────────┐
+       ▼                  ▼                  ▼
+┌──────────────┐   ┌──────────────┐   ┌──────────────┐
+│ apps/web     │   │ apps/etl     │   │ Postgres     │
+│ (Next.js)    │   │ (cron        │   │ (Supabase)   │
+│              │   │  workers)    │   │              │
+│ Dashboard    │   │              │   │ Tabelas:     │
+│ Tremor       │   │ Conectores:  │   │ accounts     │
+│ Editor de    │   │ • Pluggy     │   │ transactions │
+│  regras,     │   │ • Teller     │   │ balances     │
+│  categorias, │   │ • Schwab     │   │ categories   │
+│  metas       │   │ • Gmail+PDF  │   │ goals, rules │
+│ Aprovação    │   │ • CCXT       │   │ sync_logs    │
+│  de sync e   │   │ → cria       │   │ proposals    │
+│  proposals   │   │ SyncLog      │   │ alerts       │
+│              │   │ pendente     │   │              │
+└──────────────┘   └──────────────┘   └──────────────┘
+                                              │
+                                              ▼
+                                      ┌──────────────┐
+                                      │ Supabase     │
+                                      │ Vault        │
+                                      │ (tokens)     │
+                                      └──────────────┘
 ```
+
+**Por que MCP-first:**
+- Claude Desktop / Cursor já são clientes de chat polidos — não construímos UI de chat
+- Mesmo conjunto de tools serve agente interativo (humano) e proativo (cron)
+- Plug-in fácil de novos clientes (Telegram bot pode ser MCP client futuramente)
+- Testabilidade: tools têm contratos, podem ser testadas isoladas
 
 ### Stack
 
@@ -173,7 +201,8 @@ Um "CFO pessoal" autônomo: agente de IA + dashboard que centraliza todos os dad
 | Linguagem | **TypeScript end-to-end** (Node + Next.js) | Stack unificada, ExcelJS/SheetJS nativos, Vercel AI SDK pra streaming, deploy mais simples. Subpacote Python só se precisar (ex.: `pynubank`, OCR mais pesado). |
 | Frontend | **Next.js 16 + shadcn/ui + Tremor** | Tremor cobre todos os charts financeiros. TanStack Table pra grid de transações editável. Vercel AI SDK pra chat com streaming. |
 | Banco | **Postgres** (Supabase ou Neon) | Free tier generoso, RLS se virar multi-user. **DuckDB** opcional pra análises ad-hoc / projeções (lê Parquet, ótimo pra what-if rápido sem mexer no Postgres). |
-| Agente | **Claude Agent SDK** (Opus 4.7 + Haiku 4.5) | É um loop com tools, não um grafo multi-agent → Agent SDK > LangGraph aqui. Opus pra planejamento; Haiku pra categorização em massa. Prompt caching pra contexto fixo (regras, metas, schema). Anthropic [finance agent templates](https://github.com/anthropics/financial-services) como referência. |
+| Agente (proativo interno) | **Claude Agent SDK + Sonnet 4.6** (default), Opus 4.7 só pra projeções complexas (Fase 6+) | MCP-first: o servidor MCP expõe tools; o agente interno consome via MCP local. Prompt caching pra contexto fixo (regras, metas, schema). Anthropic [finance agent templates](https://github.com/anthropics/financial-services) como referência. |
+| Agente (interativo) | **Claude Desktop / Claude Code / Cursor** consumindo o MCP server | Sem chat UI custom. Você usa o cliente que preferir. |
 | Hosting | **Railway** (backend/cron) + **Vercel** (frontend) | ~$10-15 USD/mês. |
 | Vault | **Supabase Vault** (libsodium) | Tokens Pluggy item_id, Teller access_token, Gmail refresh_token, exchange API keys. |
 | Notificações | **Telegram Bot** (primário) + **Resend** (email fallback) | WhatsApp Business Cloud API fica como upgrade na Fase 5/6. |
@@ -191,10 +220,10 @@ Um "CFO pessoal" autônomo: agente de IA + dashboard que centraliza todos os dad
 | Schwab API | R$ 0 |
 | Resend free (3k emails/mês) | R$ 0 |
 | Telegram Bot | R$ 0 |
-| Anthropic API (Haiku categorização + Opus chat ocasional, com prompt caching) | ~R$ 30-60 |
-| **Total mensal estimado** | **~R$ 80-135** |
+| Anthropic API (Sonnet 4.6 categorização + agente proativo, com prompt caching) | ~R$ 30-80 |
+| **Total mensal estimado** | **~R$ 80-155** |
 
-Folga real: ~R$ 15-70/mês pra absorver picos de uso do agente ou eventual upgrade.
+Cabe nos R$ 150 com folga. Estimativa Sonnet 4.6: ~1k txns/mês × ~$0.005 (com cache) = ~$5/mês categorização; cron diário do agente proativo ~$5-15/mês. Subir pra Opus 4.7 só em queries pontuais que justifiquem (planejamento, what-if complexo).
 
 ### 5.2 Decisão: web-first
 
@@ -210,12 +239,27 @@ accounts(id, name, type, institution, currency, source, source_account_id,
          is_active, created_at)
 
 -- Transações canônicas (após normalização das fontes)
-transactions(id, account_id, date, amount, currency,
+transactions(id, account_id, date, posted_date, amount, currency,
              original_description, description,
              category_id, subcategory_id,
-             counterparty, tags[], notes,
-             source_txn_id, raw_json,  -- auditoria/reprocessamento
+             counterparty, notes,
+             -- parcelas (inspirado no Argus, resolve gap conhecido do Pluggy):
+             installment_number, installment_total, installment_group_id,
+             -- proveniência e estado:
+             source_txn_id, raw_json,
+             sync_log_id,            -- referência ao SyncLog que criou/atualizou
+             status,                  -- 'pending_sync' | 'active' | 'rejected'
+             deleted_at,              -- soft delete
              created_at, updated_at)
+
+-- Sync logs (workflow de aprovação inspirado no Argus)
+sync_logs(id, source, account_id,
+          started_at, finished_at,
+          status,         -- 'running' | 'pending_review' | 'approved' | 'rejected' | 'failed'
+          summary_json,   -- contagens: criadas, atualizadas, divergências
+          diff_json,      -- preview do que muda (pra UI de aprovação)
+          approved_by, approved_at,
+          error_message)
 
 -- Saldos (snapshot diário pra séries temporais)
 balances(account_id, date, balance, currency)
@@ -250,13 +294,15 @@ alerts(id, severity, kind, title, body_md,
 integration_credentials(id, provider, account_link, encrypted_token,
                         expires_at, last_refresh_at)
 
--- Embeddings pra clustering e similaridade (pgvector)
--- Adicionado em transactions:
---   embedding vector(1536)  -- da descrição+contraparte normalizadas
-
 -- Tags livres (camada flexível acima das categorias)
 transaction_tags(transaction_id, tag, source)
   -- source ∈ {user, agent, rule}
+
+-- Banco de correções (few-shot pro LLM categorizador) — substitui embeddings
+correction_examples(id, original_description, counterparty, amount, currency,
+                    chosen_category_id, chosen_subcategory_id,
+                    user_id, applied_at)
+  -- LRU: mantém últimas N=50 correções pro prompt few-shot
 
 -- Propostas do agente sobre evolução da taxonomia
 category_proposals(id, kind, payload_json, rationale_md,
@@ -268,6 +314,11 @@ category_proposals(id, kind, payload_json, rationale_md,
 category_history(id, category_id, change_type, before_json, after_json,
                  applied_at, proposal_id)
 ```
+
+**Notas de design:**
+- `transactions.status = 'pending_sync'` enquanto SyncLog não foi aprovado → relatórios filtram por `status = 'active'`. Aprovação é uma operação atômica que move todas as txns do sync.
+- Sem `pgvector` / embeddings: categorização é regras + LLM com few-shot do `correction_examples` (ver §6.2).
+- `installment_group_id` agrupa as N parcelas da mesma compra (ex: "iPhone 12x" gera 12 transactions com mesmo `installment_group_id`); facilita cancelamentos e visualização agrupada.
 
 ### 6.1 Taxonomia inicial de categorias (seed)
 
@@ -293,35 +344,52 @@ Princípios: separa **investimentos** e **transferências internas** como `kind`
 
 A migration inicial cria essas categorias; CRUD no dashboard permite renomear/criar/desativar.
 
-### 6.2 Evolução da taxonomia (adaptativa)
+### 6.2 Categorização e evolução da taxonomia (LLM direto, sem embeddings)
 
-Categoria estática vira muleta. A taxonomia evolui automaticamente por 4 mecanismos:
+**Por que sem embeddings/clustering**: volume baixo (~1k txns/mês), texto pobre semanticamente (`"PIX TRANSF JOAO 12345"`, `"AMZN MKTP US*A12B3"`), Sonnet 4.6 com prompt caching custa ~$5/mês — overhead de pgvector + clustering + retraining não compensa. LLM direto é simples, auto-explicável e mais preciso pra esse contexto.
 
-**1. Aprende com correções do usuário**
-Toda recategorização gera/atualiza uma `rule` automática (ex: contraparte "STARLINK BR" → "Internet"). O agente aplica retroativamente em transações similares (com confirmação se afetar > 10 transações). Se um padrão de correções aponta pra "deveria existir uma categoria nova", abre `category_proposal` do tipo `new_subcategory`.
+#### Pipeline de categorização (cada transação nova)
 
-**2. Clustering de "Não categorizado" e "Outros"**
-Cron semanal:
-- Pega transações em fallback dos últimos 90 dias
-- Computa embeddings (descrição + contraparte normalizadas) — `text-embedding-3-small` ou similar
-- Clustering por similaridade (HDBSCAN ou k-means simples)
-- Cluster com ≥ 5 transações → `category_proposal(kind=new_category)` com nome sugerido pelo Claude e justificativa
-- Você aprova/rejeita no dashboard com 1 clique → vira categoria + regra retroativa
+```
+1. Regras determinísticas (regex/contains/counterparty)
+   ↓ se nenhuma bate
+2. Sonnet 4.6 com prompt cacheado:
+   - Lista atual de categorias + subcategorias
+   - Últimas 30-50 correções do usuário (correction_examples, LRU)
+   - Texto da transação (description, counterparty, amount, account_type)
+   ↓
+3. Output: { category_id, subcategory_id, confidence, rationale }
+   ↓ se confidence < 0.6
+4. Fallback: "Não categorizado" + entra na fila de revisão
+```
 
-**3. Detecção de "categoria gorda demais"**
-Categoria com > 15% do gasto total ou > 50 transações/mês com alta variância → agente analisa subpadrões e sugere `split`.
-Exemplo: "Alimentação" com 2 picos detectáveis (Mercado mensal R$ 800, fixo + Delivery diário R$ 30, recorrente) → propõe split em subcategorias.
+Prompt caching: lista de categorias + correction_examples ficam em **cache prefix** (TTL 5min, refresh on demand). Custo efetivo de input cai 90% — só o texto da txn nova consome tokens normais.
 
-**4. Detecção de "categoria magra demais"**
-< 3 transações em 6 meses → sugere `archive` ou `merge` com categoria pai.
+#### Aprende com correções
+
+Toda vez que você recategoriza no dashboard:
+1. **Cria `correction_example`** — entra na fila LRU pro próximo few-shot.
+2. **Se for counterparty exato** (ex: "STARLINK BR"), cria/atualiza uma `rule` determinística → próximas transações nem chegam ao LLM.
+3. **Se mais de 5 correções similares aconteceram** (mesmo destino, contrapartes parecidas), abre `category_proposal(kind=new_subcategory)` perguntando se é hora de criar uma subcategoria nova.
+
+#### Evolução da taxonomia (cron semanal)
+
+Agente proativo (Sonnet 4.6) roda 1×/semana com tools:
+- `list_uncategorized_recent(days=90)` — lê transações em fallback
+- `list_category_stats` — % do gasto por categoria, contagem, variância, recorrência
+- `list_recent_corrections(limit=100)` — pra detectar padrões
+
+E gera propostas via tool `create_category_proposal`:
+- **Nova categoria/subcategoria**: lê N transações não-categorizadas, identifica grupos semânticos (LLM faz isso direto, sem clustering numérico) e propõe categoria nova com nome + lista de transações afetadas + regra sugerida.
+- **Split**: categoria > 15% do gasto com bimodalidade clara em valores/recorrência → propõe split.
+- **Archive/merge**: categoria com < 3 txns em 6 meses → propõe arquivar ou mergear.
+
+Tudo entra em `category_proposals(status=pending)` → você aprova com 1 clique no dashboard ou via tool MCP `accept_proposal` chamada do Claude Desktop.
 
 **Garantias:**
-- `category_history` preserva o estado anterior em qualquer mudança → relatórios históricos não quebram (queries fazem `as-of date` resolution).
-- Auto-aplicação só ocorre em mudanças de baixo risco (rename de subcategoria, criação a partir de cluster muito coeso). Splits, merges e renames de categoria-pai sempre exigem aprovação humana.
-- `confidence` na proposta determina se vira notificação push ou só fica na fila do dashboard.
-
-**Tools do agente relacionadas (Fases 4-5):**
-`cluster_uncategorized`, `propose_category_change`, `apply_proposal`, `learn_rule_from_correction`.
+- `category_history` preserva estado anterior → relatórios históricos não quebram (queries usam `as-of date` resolution).
+- Auto-aplicação só pra mudanças de baixíssimo risco (typo em rename, criação de subcategoria com confidence > 0.95 e ≥ 10 exemplos).
+- Splits, merges e archive sempre exigem aprovação humana.
 
 ---
 
@@ -330,67 +398,66 @@ Exemplo: "Alimentação" com 2 picos detectáveis (Mercado mensal R$ 800, fixo +
 Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior só estruturalmente.
 
 ### Fase 0 — Fundação (3-5 dias)
-- [ ] **Turborepo** com workspaces: `apps/web` (Next.js), `apps/api` (Node/Hono ou Next API), `apps/etl` (workers/cron), `packages/db` (schema Drizzle), `packages/shared` (types/utils)
+- [ ] **Turborepo** com workspaces: `apps/web` (Next.js), `apps/api` (Next API routes), `apps/mcp` (MCP server), `apps/etl` (workers/cron), `packages/db` (schema Drizzle), `packages/shared` (types/utils)
 - [ ] Postgres (Supabase) + migrations Drizzle
-- [ ] Schema do §6 + seed da taxonomia §6.1
-- [ ] CLI: `import-csv <arquivo> --account <id>` (OFX/CSV)
+- [ ] Schema do §6 (incluindo `sync_logs`, installments, soft delete) + seed da taxonomia §6.1
+- [ ] CLI: `import-csv <arquivo> --account <id>` que cria `SyncLog(pending_review)` (OFX/CSV)
 - [ ] Auth single-user (password + JWT)
-- [ ] Deploy Railway + Vercel funcionando, healthcheck e logs
-- **Deliverable:** subir CSVs manuais e ver transações em uma tabela web simples; categorias seedadas; CRUD básico de contas.
+- [ ] Deploy Railway (api/etl/mcp) + Vercel (web), healthcheck e logs
+- **Deliverable:** subir CSVs manuais → SyncLog pendente; aprovar/rejeitar via UI; ver transações ativas.
 
 ### Fase 1 — Ingestão BR via Pluggy + email (5-7 dias) ⭐
 - [ ] Cadastro Dashboard Pluggy (dev env), criar `clientId`/`clientSecret`
 - [ ] Pluggy Connect widget no app web — conectar Itaú PF, Nubank PF, Nubank PJ
-- [ ] Worker de sync diário (Pluggy `/items/{id}/transactions`, `/accounts`)
-- [ ] Conector Gmail (OAuth) + filtros por remetente: `todomundo@nubank.com.br`, notificações Itaú, Nomad
-- [ ] Pipeline: PDF/email → Claude (Haiku 4.5) → transações estruturadas → DB
+- [ ] Worker de sync diário (Pluggy `/items/{id}/transactions`, `/accounts`) → cria `SyncLog(pending_review)` com diff
+- [ ] Mapear `installment_*` quando Pluggy retornar parcelado
+- [ ] Conector Gmail (OAuth) + filtros: `todomundo@nubank.com.br`, notificações Itaú, Nomad
+- [ ] Pipeline: PDF/email → Sonnet 4.6 → transações estruturadas → SyncLog pendente
 - [ ] Reconciliação: dedup por (account_id, source_txn_id) preferencial; fallback hash(descrição, valor, data)
+- [ ] UI de aprovação de sync: lista de SyncLogs pendentes com diff (criadas/atualizadas/divergências)
 - [ ] Re-consent OFB: alerta 30 dias antes do vencimento (12 meses)
-- **Deliverable:** transações de Itaú + Nubank PF/PJ + Nomad entram automaticamente.
+- **Deliverable:** transações entram como pendentes; você aprova em lote pelo dashboard ou via tool MCP no Claude Desktop.
 
-### Fase 2 — Dashboard MVP + categorização adaptativa básica (5-7 dias)
+### Fase 2 — Dashboard MVP + categorização (5-7 dias)
 - [ ] Telas Tremor: Net Worth, Cashflow mensal, Top categorias, Por conta, Lista de transações
-- [ ] Filtros (período, conta, categoria, tags)
+- [ ] Filtros (período, conta, categoria, tags, status)
 - [ ] CRUD de regras de categorização (regex/contains/counterparty)
-- [ ] Pipeline de categorização: **regras determinísticas → embeddings (top-K similar) → LLM (Haiku) com cache**
-- [ ] **Aprendizado por correção**: recategorização do usuário cria/atualiza regra automática + aplica retroativamente (com confirmação se >10 txns)
-- [ ] Habilitar `pgvector` no Postgres + popular embeddings das transações
-- [ ] Tabelas `transaction_tags`, `category_history`
-- [ ] Export XLSX/Google Sheets do mês corrente (relatório)
+- [ ] Pipeline de categorização (§6.2): **regras determinísticas → Sonnet 4.6 com prompt cache + few-shot** das `correction_examples`
+- [ ] Aprendizado por correção: recategorização do usuário (a) cria `correction_example` (LRU N=50); (b) cria/atualiza `rule` se contraparte exato; (c) aplica retroativamente em similares (com confirmação se >10 txns)
+- [ ] Tabelas `transaction_tags`, `correction_examples`, `category_history`
+- [ ] Export XLSX/Google Sheets do mês corrente
 - **Deliverable:** dashboard decente; sistema já aprende quando você corrige.
 
 ### Fase 3 — US (Teller + Schwab + cripto) (3-5 dias)
-- [ ] Teller Connect OAuth → MITFCU + qualquer outro US se aparecer
-- [ ] (Opcional) Schwab Developer API se houver brokerage relevante
+- [ ] Teller Connect OAuth → MITFCU + qualquer outro US
+- [ ] (Opcional) Schwab Developer API se houver brokerage
 - [ ] FX: cache de taxas BCB/AwesomeAPI em `fx_rates(date, pair)`; converter na query
 - [ ] Cripto via CCXT (Binance/Coinbase read-only) se aplicável
 - **Deliverable:** net worth consolidado BR+US+(cripto) em BRL e USD.
 
-### Fase 4 — Agente conversacional (5-7 dias)
-- [ ] API de chat com streaming (Vercel AI SDK / SSE)
-- [ ] Tools do agente: `query_sql` (read-only sandbox), `get_balances`, `get_transactions`, `recategorize`, `project_cashflow`
-- [ ] Prompt caching pra contexto fixo (schema, regras, metas, premissas)
-- [ ] Tela de chat com markdown + gráficos inline (Tremor)
-- **Deliverable:** "quanto gastei com X mês passado?", "projeta saldo se eu economizar R$ 2k/mês".
+### Fase 4 — MCP server + agente externo (3-5 dias) ⭐
+- [ ] `apps/mcp`: servidor MCP (TS) que wrapa a API
+- [ ] Tools (lista no diagrama §5): query/list de transações, balances, accounts, categories; sync approval; bulk_categorize; goals; cashflow; proposals; alerts
+- [ ] Auth da MCP server → API via service token
+- [ ] Configuração de exemplo pra Claude Desktop (`claude_desktop_config.json`)
+- [ ] README com prompts de exemplo ("aprove os syncs pendentes", "categoriza essas transações", "qual meu cashflow projetado")
+- **Deliverable:** abre Claude Desktop, conversa com seu CFO. Sem chat UI custom.
 
-### Fase 5 — Proatividade + taxonomia adaptativa avançada (6-8 dias)
+### Fase 5 — Proatividade + evolução da taxonomia (6-8 dias)
 - [ ] Telegram Bot setup + token no vault
-- [ ] Cron diário de análise (agente roda sem prompt, escreve em `alerts`)
-- [ ] Tools de alerta: outliers, projeção de orçamento, oportunidade de alocação, fechamento de cartão sem saldo, OFB consent expirando
-- [ ] **Cron semanal de evolução da taxonomia** (§6.2):
-  - [ ] `cluster_uncategorized` — propõe novas categorias a partir de clusters
-  - [ ] Detecção de categoria "gorda" → propõe split
-  - [ ] Detecção de categoria "magra" → propõe archive/merge
-  - [ ] Tabela `category_proposals` + UI de aprovação (1-clique) no dashboard
-- [ ] Relatório semanal automático no Telegram + PDF mensal por email (Resend)
-- **Deliverable:** acordo segunda-feira com mensagem "sua semana financeira" + propostas de melhoria de taxonomia esperando aprovação.
+- [ ] Agente proativo interno (Sonnet 4.6 + Claude Agent SDK) consumindo as MESMAS MCP tools
+- [ ] Cron diário: detecta outliers, projeção de orçamento, fechamento de cartão sem saldo, OFB consent expirando → escreve em `alerts` + envia Telegram
+- [ ] Cron semanal de evolução da taxonomia (§6.2): agente lê uncategorized + stats e propõe via `create_category_proposal`
+- [ ] UI de aprovação 1-clique de proposals no dashboard (e via tool MCP `accept_proposal`)
+- [ ] Relatório semanal Telegram + PDF mensal por email (Resend)
+- **Deliverable:** segunda-feira: 1 mensagem no Telegram com semana financeira + fila de proposals no dashboard.
 
 ### Fase 6 — Planejamento avançado (contínuo)
 - [ ] Engine de projeção determinística (cashflow + investment growth com CDI/SELIC/USD)
 - [ ] Monte Carlo opcional pra cenários com volatilidade
 - [ ] Editor de cenários no dashboard ("what-if")
 - [ ] Tracking de metas com alertas de desvio
-- [ ] Sugestões de realocação (regras + LLM)
+- [ ] Sugestões de realocação — aqui sim vale **Opus 4.7** pra raciocínio mais profundo (cron mensal, custo justifica)
 - [ ] **Upgrade futuro**: WhatsApp Business Cloud API substituindo Telegram
 
 ---
@@ -416,7 +483,7 @@ Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior s
 1. **Limite de 100 items do Pluggy Dev env.** Folga gigantesca pra single-user (5-10 contas), mas se o produto crescer pra multi-user, precisa virar Production (R$ 2.5k/mês). Aceitável agora.
 2. **Limitações conhecidas do Pluggy** (reportadas pela comunidade): parcelados às vezes inconsistentes, Pix no crédito pode não vir, transferências sem nome de beneficiário em alguns casos. **Mitigação:** email/PDF parsing como complemento + reconciliação por `source_txn_id` + flag de divergência no dashboard.
 3. **Renovação de consent OFB a cada 12 meses** é a pior fricção do produto. UX precisa antecipar (alerta 30d antes, deep-link pro widget de re-consent).
-4. **Categorização LLM pode alucinar.** Mitigação: ordem **regras determinísticas → embeddings (similaridade com txns já categorizadas) → LLM (último caso)**; LLM treina nas correções do usuário.
+4. **Categorização LLM pode alucinar.** Mitigação: ordem **regras determinísticas → Sonnet 4.6 com few-shot das correções recentes** + threshold de confidence (< 0.6 vai pra "Não categorizado"). Sem embeddings — texto bancário é pobre semanticamente, LLM direto é mais preciso e auto-explicável (você lê o `rationale`).
 5. **FX histórico**: armazenar sempre em currency original; converter na query com taxa do dia da transação (cache em `fx_rates(date, pair, rate)`).
 6. **MITFCU pode não estar no Teller**. Fallback: Plaid Limited Production (200 calls grátis/produto) → se passar disso, pay-as-you-go (~$1.50/user/mês). Cabe no orçamento.
 7. **pynubank fica como opcional** — se o Pluggy Dev cobrir bem o Nubank na prática, dispensável. Decidir depois da Fase 1.
@@ -435,6 +502,18 @@ Nenhum bloqueador imediato. A próxima etapa é começar a Fase 0. Pequenas esco
 
 ---
 
+## Inspirações de outros projetos
+
+**[gbrancaglione/argus](https://github.com/gbrancaglione/argus)** (Rails + MCP server + Vite/React, foco em cartão de crédito) — adotamos:
+- **Arquitetura MCP-first**: tools como contrato; agente fica fora da app
+- **Sync approval workflow**: importações criam `SyncLog(pending_review)` com diff, aprovado em lote
+- **Installment fields** em transactions (resolve gap conhecido do Pluggy em parcelados)
+- **Soft delete** em transactions
+
+Não adotamos: stack Rails (mantemos TS), labels-only sem hierarquia (mantemos categorias hierárquicas + tags), Vite minimal (Next+Tremor é melhor pra dashboards financeiros).
+
+---
+
 ## Referências
 
 - [Pluggy pricing](https://www.pluggy.ai/pricing)
@@ -448,3 +527,5 @@ Nenhum bloqueador imediato. A próxima etapa é começar a Fase 0. Pequenas esco
 - [Anthropic finance agent templates](https://github.com/anthropics/financial-services)
 - [pynubank](https://github.com/andreroggeri/pynubank)
 - [Open Finance Brasil](https://openfinancebrasil.org.br/)
+- [Model Context Protocol](https://modelcontextprotocol.io/)
+- [gbrancaglione/argus](https://github.com/gbrancaglione/argus) — projeto de referência (sync approval, MCP-first)
