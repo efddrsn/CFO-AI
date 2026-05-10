@@ -1,5 +1,5 @@
 import { bigint, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { categories } from "./categories.js";
+import { categories } from "./categories";
 
 /**
  * Banco de correções de categorização do usuário.

@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { db } from "./index.js";
-import { categories } from "./schema/categories.js";
+import { db } from "./index";
+import { categories } from "./schema/categories";
 
 /**
  * Taxonomia inicial — §6.1 da SPEC.

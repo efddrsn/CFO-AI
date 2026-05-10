@@ -6,7 +6,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { users } from "./users.js";
+import { users } from "./users";
 
 /** type ∈ {checking, savings, credit_card, investment, brokerage, crypto_exchange, crypto_wallet, other} */
 /** source ∈ {manual, csv, ofx, pluggy, teller, plaid, schwab, gmail, ccxt, zerion} */

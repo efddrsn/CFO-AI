@@ -1,5 +1,5 @@
 import { bigint, date, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
-import { accounts } from "./accounts.js";
+import { accounts } from "./accounts";
 
 export const balances = pgTable(
   "balances",

@@ -1,6 +1,6 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { accounts } from "./accounts.js";
-import { users } from "./users.js";
+import { accounts } from "./accounts";
+import { users } from "./users";
 
 /** status ∈ {running, pending_review, approved, rejected, failed} */
 /** source ∈ {csv, ofx, pluggy, teller, plaid, schwab, gmail, ccxt, zerion} */

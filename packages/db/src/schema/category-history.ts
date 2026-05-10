@@ -1,6 +1,6 @@
 import { jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { categories } from "./categories.js";
-import { categoryProposals } from "./category-proposals.js";
+import { categories } from "./categories";
+import { categoryProposals } from "./category-proposals";
 
 /**
  * Histórico de mudanças em categorias — preserva integridade de relatórios passados.

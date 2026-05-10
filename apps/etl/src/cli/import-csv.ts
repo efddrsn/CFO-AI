@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { db, accounts, syncLogs, transactions } from "@cfo-ai/db";
 import { eq } from "drizzle-orm";
-import { parseCsv } from "../parsers/csv.js";
+import { parseCsv } from "../parsers/csv";
 
 const program = new Command();
 

@@ -3,12 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": {
-    "import-csv": "./dist/cli/import-csv.js"
-  },
   "scripts": {
     "dev": "tsx src/cli/import-csv.ts",
-    "build": "tsc",
+    "build": "echo 'apps/etl roda via tsx — sem build step'",
     "import-csv": "tsx src/cli/import-csv.ts",
     "typecheck": "tsc --noEmit"
   },

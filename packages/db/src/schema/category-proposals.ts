@@ -1,5 +1,5 @@
 import { jsonb, numeric, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
-import { users } from "./users.js";
+import { users } from "./users";
 
 /** kind ∈ {new_category, new_subcategory, split, merge, rename, archive} */
 /** status ∈ {pending, accepted, rejected, dismissed, auto_applied} */

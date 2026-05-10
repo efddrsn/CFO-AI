@@ -10,9 +10,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { accounts } from "./accounts.js";
-import { categories } from "./categories.js";
-import { syncLogs } from "./sync-logs.js";
+import { accounts } from "./accounts";
+import { categories } from "./categories";
+import { syncLogs } from "./sync-logs";
 
 /** status ∈ {pending_sync, active, rejected} */
 export const transactions = pgTable(

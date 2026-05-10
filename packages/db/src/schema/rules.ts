@@ -7,7 +7,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
-import { categories } from "./categories.js";
+import { categories } from "./categories";
 
 /** matchType ∈ {regex, contains, counterparty, mcc} */
 export const rules = pgTable("rules", {

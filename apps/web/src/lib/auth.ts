@@ -1,4 +1,8 @@
-import bcrypt from "bcryptjs";
+/**
+ * Edge-safe auth helpers (JWT only, sem bcrypt).
+ * O middleware roda no Edge Runtime → não pode importar bcrypt.
+ * Pra hash/verify de password, use `auth-server.ts` em route handlers Node.
+ */
 import { jwtVerify, SignJWT } from "jose";
 import type { NextRequest } from "next/server";
 
@@ -6,17 +10,6 @@ const SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET ?? "dev-secret-change-me",
 );
 const COOKIE_NAME = "cfo_session";
-
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 12);
-}
-
-export async function verifyPassword(
-  password: string,
-  hash: string,
-): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
 
 export async function createToken(payload: { userId: string; email: string }) {
   return new SignJWT(payload)

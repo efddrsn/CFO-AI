@@ -2,7 +2,10 @@ import { db, users } from "@cfo-ai/db";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createToken, SESSION_COOKIE, verifyPassword } from "@/lib/auth";
+import { createToken, SESSION_COOKIE } from "@/lib/auth";
+import { verifyPassword } from "@/lib/auth-server";
+
+export const runtime = "nodejs";
 
 const Body = z.object({
   email: z.string().email(),

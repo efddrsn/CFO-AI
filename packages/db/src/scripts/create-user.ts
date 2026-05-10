@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { db } from "../index.js";
-import { users } from "../schema/users.js";
+import { db } from "../index";
+import { users } from "../schema/users";
 import bcrypt from "bcryptjs";
 
 /**
