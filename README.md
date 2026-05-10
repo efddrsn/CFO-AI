@@ -1,1 +1,161 @@
 # CFO-AI
+
+Seu CFO pessoal autônomo. Veja [`SPEC.md`](./SPEC.md) pra visão, arquitetura e roadmap.
+
+> **Status:** Fase 0 (Fundação) implementada.
+
+## Estrutura (Turborepo)
+
+```
+apps/
+  web/          Next.js 15 + Tailwind — UI + API routes (auth, transactions, sync-logs, connect, Pluggy)
+  mcp/          MCP server (Node) — tools consumidas por Claude Desktop / agente proativo
+  etl/          Workers e CLI — `import-csv`, `pluggy-sync`
+packages/
+  db/           Schema Drizzle + migrations + seed de categorias
+  integrations/ Clientes de provedores (Pluggy, Gmail; Teller/CCXT na frente)
+  agent/        Categorização e email parsing via Sonnet 4.6 (prompt cache + few-shot)
+  shared/       Types e utils compartilhados (Currency, money helpers)
+```
+
+## Pré-requisitos
+
+- Node 22+ (`.node-version`)
+- pnpm 9+
+- Postgres 15+ (local ou Supabase)
+
+## Setup local
+
+```sh
+# 1. Instalar dependências
+pnpm install
+
+# 2. Copiar env e preencher
+cp .env.example .env
+# Edite .env: DATABASE_URL, JWT_SECRET (openssl rand -base64 32)
+
+# 3. Gerar migration inicial e aplicar
+pnpm db:generate
+pnpm db:migrate
+
+# 4. Seed da taxonomia (§6.1 da SPEC)
+pnpm db:seed
+
+# 5. Criar seu usuário (single-user)
+pnpm --filter @cfo-ai/db create-user voce@email.com 'sua-senha' 'Seu Nome'
+
+# 6. Subir o app web
+pnpm --filter @cfo-ai/web dev
+# → http://localhost:3000 (login: voce@email.com / sua-senha)
+```
+
+## Conectar Gmail (Fase 1)
+
+1. Crie um OAuth client em https://console.cloud.google.com/apis/credentials
+   - Tipo: Web application
+   - Authorized redirect URI: `http://localhost:3000/api/gmail/callback` (dev) ou seu `APP_URL/api/gmail/callback`
+   - Habilite a Gmail API no projeto
+2. Adicione ao `.env`:
+   ```
+   GMAIL_OAUTH_CLIENT_ID=...
+   GMAIL_OAUTH_CLIENT_SECRET=...
+   APP_URL=http://localhost:3000
+   ```
+3. Em `/connect` clique "Conectar Gmail" → consentimento Google
+4. Sync (filtros padrão: Nubank Pix, Nubank fatura PDF, Itaú notif, Nomad statement):
+   ```
+   pnpm gmail-sync
+   # Ou filtros específicos:
+   pnpm gmail-sync -- --filters nubank_pix_received,nubank_invoice_pdf
+   ```
+5. Aprove em `/sync-logs/<id>`
+
+## Alertas de re-consent (OFB)
+
+Pluggy/OFB exigem renovar consent a cada 12 meses. Rode periodicamente:
+
+```sh
+pnpm check-consents   # cria alerts(kind=consent_expiring) com 30 dias de antecedência
+```
+
+Em produção, cron diário no Railway: `0 9 * * * cd /app && pnpm check-consents`.
+
+## Conectar Pluggy (Fase 1)
+
+1. Crie conta em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) e gere `clientId` + `clientSecret` (free dev env, 100 items)
+2. Adicione ao `.env`:
+   ```
+   PLUGGY_CLIENT_ID=...
+   PLUGGY_CLIENT_SECRET=...
+   ANTHROPIC_API_KEY=...   # opcional na Fase 1, mas sem ele a categorização vai pra fallback
+   ```
+3. Abra `/connect` → "Conectar via Pluggy" → escolhe banco → consentimento OFB
+4. Sync: `pnpm pluggy-sync` (puxa últimos 30 dias por item, cria `SyncLog(pending_review)`)
+5. Aprove em `/sync-logs/<id>` ou via tool MCP `approve_sync` no Claude Desktop
+
+Para rodar diariamente em produção, configure cron no Railway:
+```sh
+0 6 * * * cd /app && pnpm --filter @cfo-ai/etl pluggy-sync
+```
+
+## Importar um CSV
+
+CSV mínimo (header obrigatório): `date,description,amount[,currency,counterparty,source_txn_id]`
+
+Datas: `yyyy-mm-dd` ou `dd/mm/yyyy`. Valores: aceitam vírgula ou ponto como decimal; negativo = débito.
+
+```sh
+# 1. Crie uma conta no Postgres pra receber as transações.
+# (UI de contas vem na Fase 2; pra Fase 0 use Drizzle Studio)
+pnpm db:studio
+
+# 2. Importe um CSV → vira SyncLog(pending_review)
+pnpm import-csv apps/etl/sample.csv --account <uuid-da-conta>
+
+# 3. Aprove em http://localhost:3000/sync-logs
+```
+
+`--auto-approve` pula a revisão (útil em scripts).
+
+## Conectar ao Claude Desktop (MCP)
+
+```sh
+pnpm --filter @cfo-ai/mcp build
+```
+
+Adicione ao `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
+
+```json
+{
+  "mcpServers": {
+    "cfo-ai": {
+      "command": "node",
+      "args": ["/caminho/absoluto/CFO-AI/apps/mcp/dist/index.js"],
+      "env": {
+        "DATABASE_URL": "postgresql://..."
+      }
+    }
+  }
+}
+```
+
+Reabra o Claude Desktop. Tools disponíveis na Fase 0: `list_accounts`, `list_transactions`, `list_pending_syncs`, `approve_sync`, `reject_sync`, `expense_summary`.
+
+## Comandos úteis
+
+```sh
+pnpm dev               # roda tudo em paralelo (Turborepo)
+pnpm build             # build de tudo
+pnpm typecheck         # typecheck em todos os pacotes
+pnpm db:studio         # Drizzle Studio (GUI do banco)
+```
+
+## Deploy
+
+- **Postgres**: Supabase (free tier).
+- **Web**: Vercel apontando pra `apps/web`. Vars: `DATABASE_URL`, `JWT_SECRET`.
+- **MCP / ETL**: Railway. Var: `DATABASE_URL`.
+
+## Próximas fases
+
+Ver [`SPEC.md` §7](./SPEC.md). Fase 1 em andamento (Pluggy entregue, Gmail pendente).
