@@ -17,6 +17,7 @@
     "db:seed": "pnpm --filter @cfo-ai/db seed",
     "db:studio": "pnpm --filter @cfo-ai/db studio",
     "import-csv": "pnpm --filter @cfo-ai/etl import-csv",
+    "pluggy-sync": "pnpm --filter @cfo-ai/etl pluggy-sync",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\""
   },
   "devDependencies": {

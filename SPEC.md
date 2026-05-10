@@ -410,17 +410,24 @@ Cada fase é entregável, gera valor sozinha, e a próxima depende da anterior s
 - [ ] Deploy Railway + Vercel (instruções no README; aguardando criação das contas)
 - **Deliverable:** subir CSVs → SyncLog pendente; aprovar/rejeitar via UI ou via Claude Desktop (MCP); transações ativas visíveis.
 
-### Fase 1 — Ingestão BR via Pluggy + email (5-7 dias) ⭐
-- [ ] Cadastro Dashboard Pluggy (dev env), criar `clientId`/`clientSecret`
-- [ ] Pluggy Connect widget no app web — conectar Itaú PF, Nubank PF, Nubank PJ
-- [ ] Worker de sync diário (Pluggy `/items/{id}/transactions`, `/accounts`) → cria `SyncLog(pending_review)` com diff
-- [ ] Mapear `installment_*` quando Pluggy retornar parcelado
+### Fase 1 — Ingestão BR via Pluggy + email (em progresso) ⭐
+**Pluggy entregue** (PR #1):
+- [ ] Cadastro Dashboard Pluggy (dev env), criar `clientId`/`clientSecret` — *user action*
+- [x] Pacote `@cfo-ai/integrations` com cliente Pluggy + mapping Pluggy→CFO-AI
+- [x] Página `/connect` com Pluggy Connect widget (carrega script CDN, abre fluxo OFB)
+- [x] APIs: `/api/pluggy/connect-token`, `/api/pluggy/items`, `/api/pluggy/webhook`
+- [x] Worker `pluggy-sync` (`pnpm pluggy-sync` — janela 30d default, paginado)
+- [x] Mapeamento de `installment_*` quando Pluggy retorna parcelado (creditCardMetadata)
+- [x] Reconciliação por `(account_id, source_txn_id)` (unique index no schema)
+- [x] UI `/sync-logs/[id]` com lista de transações, categoria, parcela, status
+- [x] Pacote `@cfo-ai/agent` com categorização Sonnet 4.6 + few-shot LRU (§6.2)
+- [x] Pipeline ETL: regras determinísticas → LLM → fallback "Não categorizado"
+
+**Pendente nesta fase:**
 - [ ] Conector Gmail (OAuth) + filtros: `todomundo@nubank.com.br`, notificações Itaú, Nomad
 - [ ] Pipeline: PDF/email → Sonnet 4.6 → transações estruturadas → SyncLog pendente
-- [ ] Reconciliação: dedup por (account_id, source_txn_id) preferencial; fallback hash(descrição, valor, data)
-- [ ] UI de aprovação de sync: lista de SyncLogs pendentes com diff (criadas/atualizadas/divergências)
 - [ ] Re-consent OFB: alerta 30 dias antes do vencimento (12 meses)
-- **Deliverable:** transações entram como pendentes; você aprova em lote pelo dashboard ou via tool MCP no Claude Desktop.
+- **Deliverable:** Pluggy ponta-a-ponta funciona; falta Gmail e alerta de re-consent.
 
 ### Fase 2 — Dashboard MVP + categorização (5-7 dias)
 - [ ] Telas Tremor: Net Worth, Cashflow mensal, Top categorias, Por conta, Lista de transações

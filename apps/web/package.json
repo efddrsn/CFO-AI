@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@cfo-ai/db": "workspace:*",
+    "@cfo-ai/integrations": "workspace:*",
     "@cfo-ai/shared": "workspace:*",
     "bcryptjs": "^2.4.3",
     "drizzle-orm": "^0.36.4",

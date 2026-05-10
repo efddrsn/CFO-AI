@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ["@cfo-ai/db", "@cfo-ai/shared"],
+  transpilePackages: ["@cfo-ai/db", "@cfo-ai/integrations", "@cfo-ai/shared"],
   experimental: {
     serverActions: {
       bodySizeLimit: "10mb", // pra import de CSVs/OFX maiores

@@ -7,10 +7,13 @@
     "dev": "tsx src/cli/import-csv.ts",
     "build": "echo 'apps/etl roda via tsx — sem build step'",
     "import-csv": "tsx src/cli/import-csv.ts",
+    "pluggy-sync": "tsx src/cli/pluggy-sync.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@cfo-ai/agent": "workspace:*",
     "@cfo-ai/db": "workspace:*",
+    "@cfo-ai/integrations": "workspace:*",
     "@cfo-ai/shared": "workspace:*",
     "commander": "^12.1.0",
     "dotenv": "^16.4.7",

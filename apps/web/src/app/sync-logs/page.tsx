@@ -1,5 +1,6 @@
 import { db, syncLogs } from "@cfo-ai/db";
 import { desc } from "drizzle-orm";
+import Link from "next/link";
 import { ApproveButtons } from "./approve-buttons";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +32,9 @@ export default async function SyncLogsPage() {
           {rows.map((s) => (
             <tr key={s.id} className="border-b border-zinc-900 align-top">
               <td className="py-2 font-mono">
-                {s.startedAt.toISOString().slice(0, 19)}
+                <Link href={`/sync-logs/${s.id}`} className="underline">
+                  {s.startedAt.toISOString().slice(0, 19)}
+                </Link>
               </td>
               <td>{s.source}</td>
               <td>

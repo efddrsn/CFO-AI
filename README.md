@@ -8,12 +8,14 @@ Seu CFO pessoal autônomo. Veja [`SPEC.md`](./SPEC.md) pra visão, arquitetura e
 
 ```
 apps/
-  web/        Next.js 15 + Tailwind — UI + API routes (auth, transactions, sync-logs)
-  mcp/        MCP server (Node) — tools consumidas por Claude Desktop / agente proativo
-  etl/        Workers e CLI — começa com `import-csv`
+  web/          Next.js 15 + Tailwind — UI + API routes (auth, transactions, sync-logs, connect, Pluggy)
+  mcp/          MCP server (Node) — tools consumidas por Claude Desktop / agente proativo
+  etl/          Workers e CLI — `import-csv`, `pluggy-sync`
 packages/
-  db/         Schema Drizzle + migrations + seed de categorias
-  shared/     Types e utils compartilhados (Currency, money helpers)
+  db/           Schema Drizzle + migrations + seed de categorias
+  integrations/ Clientes de provedores (Pluggy hoje; Teller/Gmail/CCXT na frente)
+  agent/        Categorização via Sonnet 4.6 com prompt cache + few-shot
+  shared/       Types e utils compartilhados (Currency, money helpers)
 ```
 
 ## Pré-requisitos
@@ -45,6 +47,24 @@ pnpm --filter @cfo-ai/db create-user voce@email.com 'sua-senha' 'Seu Nome'
 # 6. Subir o app web
 pnpm --filter @cfo-ai/web dev
 # → http://localhost:3000 (login: voce@email.com / sua-senha)
+```
+
+## Conectar Pluggy (Fase 1)
+
+1. Crie conta em [dashboard.pluggy.ai](https://dashboard.pluggy.ai) e gere `clientId` + `clientSecret` (free dev env, 100 items)
+2. Adicione ao `.env`:
+   ```
+   PLUGGY_CLIENT_ID=...
+   PLUGGY_CLIENT_SECRET=...
+   ANTHROPIC_API_KEY=...   # opcional na Fase 1, mas sem ele a categorização vai pra fallback
+   ```
+3. Abra `/connect` → "Conectar via Pluggy" → escolhe banco → consentimento OFB
+4. Sync: `pnpm pluggy-sync` (puxa últimos 30 dias por item, cria `SyncLog(pending_review)`)
+5. Aprove em `/sync-logs/<id>` ou via tool MCP `approve_sync` no Claude Desktop
+
+Para rodar diariamente em produção, configure cron no Railway:
+```sh
+0 6 * * * cd /app && pnpm --filter @cfo-ai/etl pluggy-sync
 ```
 
 ## Importar um CSV
@@ -107,4 +127,4 @@ pnpm db:studio         # Drizzle Studio (GUI do banco)
 
 ## Próximas fases
 
-Ver [`SPEC.md` §7](./SPEC.md). Próxima: Fase 1 — ingestão Pluggy + Gmail.
+Ver [`SPEC.md` §7](./SPEC.md). Fase 1 em andamento (Pluggy entregue, Gmail pendente).
